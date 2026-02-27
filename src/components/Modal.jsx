@@ -1,5 +1,4 @@
 import { C, font } from "../utils/theme";
-import { Btn } from "./Primitives";
 
 export function Modal({ children, visible }) {
   if (!visible) return null;
