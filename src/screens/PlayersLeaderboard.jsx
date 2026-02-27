@@ -8,44 +8,151 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
   const [name, setName] = useState("");
   const [show, setShow] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [nameError, setNameError] = useState("");
 
   if (selectedPlayer) {
     return <PlayerProfile player={selectedPlayer} onBack={() => setSelectedPlayer(null)} />;
   }
+
+  const handleNameChange = (val) => {
+    setName(val);
+    if (!val.trim()) {
+      setNameError("");
+      return;
+    }
+    const duplicate = globalPlayers.some(
+      (p) => p.name.trim().toLowerCase() === val.trim().toLowerCase()
+    );
+    setNameError(duplicate ? `"${val.trim()}" already exists in the player pool.` : "");
+  };
+
+  const handleAdd = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    const duplicate = globalPlayers.some(
+      (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicate) {
+      setNameError(`"${trimmed}" already exists in the player pool.`);
+      return;
+    }
+
+    api.createPlayer(trimmed)
+      .then((newPlayer) => {
+        onAdd(newPlayer);
+        setName("");
+        setNameError("");
+        setShow(false);
+      })
+      .catch(() => alert("Failed to create player"));
+  };
+
+  const canSubmit = name.trim() && !nameError;
 
   return (
     <div>
       <BackBtn onClick={() => nav("Home")} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
         <SectionTitle title="Player Pool" sub={`${globalPlayers.length} players`} />
-        <Btn label={show ? "Cancel" : "+ Add"} sm color={C.blue} onClick={() => setShow(!show)} />
+        <Btn
+          label={show ? "Cancel" : "+ Add"}
+          sm
+          color={C.blue}
+          onClick={() => {
+            setShow(!show);
+            setName("");
+            setNameError("");
+          }}
+        />
       </div>
+
       {show && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
+        <div style={{
+          background: C.card,
+          border: `1px solid ${nameError ? C.red + "66" : C.border}`,
+          borderRadius: 14,
+          padding: 16,
+          marginBottom: 16,
+          transition: "border-color 0.2s",
+        }}>
           <div style={{ color: C.text, fontWeight: 700, marginBottom: 10, fontFamily: font }}>New Player</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Input placeholder="Player name" value={name} onChange={setName} style={{ flex: 1 }} />
+            <Input
+              placeholder="Player name"
+              value={name}
+              onChange={handleNameChange}
+              style={{ flex: 1, borderColor: nameError ? C.red : undefined }}
+            />
             <Btn
               label="Add"
               sm
               color={C.green}
-              onClick={() => {
-                if (name.trim()) {
-                  api.createPlayer(name.trim())
-                    .then(newPlayer => {
-                      onAdd(newPlayer);
-                      setName("");
-                      setShow(false);
-                    })
-                    .catch(() => alert("Failed to create player"));
-                }
-              }}
-              disabled={!name.trim()}
+              onClick={handleAdd}
+              disabled={!canSubmit}
             />
-            <Btn label="Cancel" sm color={C.textMuted} onClick={() => setShow(false)} />
+            <Btn
+              label="Cancel"
+              sm
+              color={C.textMuted}
+              onClick={() => {
+                setShow(false);
+                setName("");
+                setNameError("");
+              }}
+            />
           </div>
+
+          {/* Inline error / match hint */}
+          {name.trim() && (
+            <div style={{
+              marginTop: 10,
+              fontSize: 12,
+              fontFamily: font,
+              color: nameError ? C.red : C.green,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}>
+              <span>{nameError ? "⚠️" : "✅"}</span>
+              <span>{nameError || `"${name.trim()}" is available`}</span>
+            </div>
+          )}
+
+          {/* Live search — show similar names if any */}
+          {name.trim() && !nameError && (() => {
+            const similar = globalPlayers.filter((p) =>
+              p.name.toLowerCase().includes(name.trim().toLowerCase())
+            );
+            return similar.length > 0 ? (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ color: C.textMuted, fontSize: 11, fontFamily: font, marginBottom: 6 }}>
+                  Similar existing players:
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {similar.map((p) => (
+                    <span
+                      key={p.id}
+                      style={{
+                        background: C.blue + "18",
+                        border: `1px solid ${C.blue}33`,
+                        borderRadius: 8,
+                        padding: "3px 10px",
+                        fontSize: 12,
+                        color: C.blue,
+                        fontFamily: font,
+                      }}
+                    >
+                      {p.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null;
+          })()}
         </div>
       )}
+
       {globalPlayers.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontFamily: font }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
@@ -59,7 +166,7 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
               key={p.id || i}
               onClick={() => {
                 api.getPlayerStats(p.id)
-                  .then(fullData => setSelectedPlayer(fullData))
+                  .then((fullData) => setSelectedPlayer(fullData))
                   .catch(() => alert("Failed to load player details"));
               }}
               style={{
@@ -82,7 +189,9 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ color: C.text, fontWeight: 600 }}>{p.name}</div>
-                <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>{p.totalRuns || p.runs || 0}R · {p.totalWickets || p.wickets || 0}W</div>
+                <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
+                  {p.totalRuns || p.runs || 0}R · {p.totalWickets || p.wickets || 0}W
+                </div>
               </div>
               <div style={{ color: C.textMuted, fontSize: 14 }}>›</div>
             </div>
@@ -103,7 +212,7 @@ export function LeaderboardScreen({ nav }) {
   const load = (type) => {
     setLoading(true); setError(null);
     api.getLeaderboard(type)
-      .then(data => { setPlayers(data); setLoading(false); })
+      .then((data) => { setPlayers(data); setLoading(false); })
       .catch(() => { setError("Could not load leaderboard from server."); setLoading(false); });
   };
 
@@ -152,7 +261,7 @@ export function LeaderboardScreen({ nav }) {
       {!loading && players.map((p, i) => (
         <div key={p.id} onClick={() => {
           api.getPlayerStats(p.id)
-            .then(fullData => setSelectedPlayer(fullData))
+            .then((fullData) => setSelectedPlayer(fullData))
             .catch(() => alert("Failed to load player details"));
         }} style={{
           background: C.card,
