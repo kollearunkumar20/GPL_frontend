@@ -4,7 +4,7 @@ import { Btn, BackBtn, SectionTitle, Input } from "../components/Primitives";
 import api from "../api/api";
 import { PlayerProfile } from "./PlayerProfile";
 
-export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
+export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
   const [name, setName] = useState("");
   const [show, setShow] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -16,10 +16,7 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
 
   const handleNameChange = (val) => {
     setName(val);
-    if (!val.trim()) {
-      setNameError("");
-      return;
-    }
+    if (!val.trim()) { setNameError(""); return; }
     const duplicate = globalPlayers.some(
       (p) => p.name.trim().toLowerCase() === val.trim().toLowerCase()
     );
@@ -44,8 +41,9 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
         setName("");
         setNameError("");
         setShow(false);
+        showSnack(`"${trimmed}" added to player pool!`, "success");
       })
-      .catch(() => alert("Failed to create player"));
+      .catch(() => showSnack("Failed to create player. Try again.", "error"));
   };
 
   const canSubmit = name.trim() && !nameError;
@@ -57,13 +55,8 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
         <SectionTitle title="Player Pool" sub={`${globalPlayers.length} players`} />
         <Btn
           label={show ? "Cancel" : "+ Add"}
-          sm
-          color={C.blue}
-          onClick={() => {
-            setShow(!show);
-            setName("");
-            setNameError("");
-          }}
+          sm color={C.blue}
+          onClick={() => { setShow(!show); setName(""); setNameError(""); }}
         />
       </div>
 
@@ -71,9 +64,7 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
         <div style={{
           background: C.card,
           border: `1px solid ${nameError ? C.red + "66" : C.border}`,
-          borderRadius: 14,
-          padding: 16,
-          marginBottom: 16,
+          borderRadius: 14, padding: 16, marginBottom: 16,
           transition: "border-color 0.2s",
         }}>
           <div style={{ color: C.text, fontWeight: 700, marginBottom: 10, fontFamily: font }}>New Player</div>
@@ -84,65 +75,27 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
               onChange={handleNameChange}
               style={{ flex: 1, borderColor: nameError ? C.red : undefined }}
             />
-            <Btn
-              label="Add"
-              sm
-              color={C.green}
-              onClick={handleAdd}
-              disabled={!canSubmit}
-            />
-            <Btn
-              label="Cancel"
-              sm
-              color={C.textMuted}
-              onClick={() => {
-                setShow(false);
-                setName("");
-                setNameError("");
-              }}
-            />
+            <Btn label="Add" sm color={C.green} onClick={handleAdd} disabled={!canSubmit} />
+            <Btn label="Cancel" sm color={C.textMuted} onClick={() => { setShow(false); setName(""); setNameError(""); }} />
           </div>
 
-          {/* Inline error / match hint */}
           {name.trim() && (
-            <div style={{
-              marginTop: 10,
-              fontSize: 12,
-              fontFamily: font,
-              color: nameError ? C.red : C.green,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}>
+            <div style={{ marginTop: 10, fontSize: 12, fontFamily: font, color: nameError ? C.red : C.green, display: "flex", alignItems: "center", gap: 6 }}>
               <span>{nameError ? "⚠️" : "✅"}</span>
               <span>{nameError || `"${name.trim()}" is available`}</span>
             </div>
           )}
 
-          {/* Live search — show similar names if any */}
           {name.trim() && !nameError && (() => {
             const similar = globalPlayers.filter((p) =>
               p.name.toLowerCase().includes(name.trim().toLowerCase())
             );
             return similar.length > 0 ? (
               <div style={{ marginTop: 10 }}>
-                <div style={{ color: C.textMuted, fontSize: 11, fontFamily: font, marginBottom: 6 }}>
-                  Similar existing players:
-                </div>
+                <div style={{ color: C.textMuted, fontSize: 11, fontFamily: font, marginBottom: 6 }}>Similar existing players:</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {similar.map((p) => (
-                    <span
-                      key={p.id}
-                      style={{
-                        background: C.blue + "18",
-                        border: `1px solid ${C.blue}33`,
-                        borderRadius: 8,
-                        padding: "3px 10px",
-                        fontSize: 12,
-                        color: C.blue,
-                        fontFamily: font,
-                      }}
-                    >
+                    <span key={p.id} style={{ background: C.blue + "18", border: `1px solid ${C.blue}33`, borderRadius: 8, padding: "3px 10px", fontSize: 12, color: C.blue, fontFamily: font }}>
                       {p.name}
                     </span>
                   ))}
@@ -167,13 +120,11 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
               onClick={() => {
                 api.getPlayerStats(p.id)
                   .then((fullData) => setSelectedPlayer(fullData))
-                  .catch(() => alert("Failed to load player details"));
+                  .catch(() => showSnack("Failed to load player details.", "error"));
               }}
               style={{
-                background: C.card,
-                border: `1px solid ${C.border}`,
-                borderRadius: 12,
-                padding: "12px 14px",
+                background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 12, padding: "12px 14px",
                 display: "flex", alignItems: "center", gap: 12,
                 fontFamily: font, cursor: "pointer",
               }}
@@ -202,7 +153,7 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel }) {
   );
 }
 
-export function LeaderboardScreen({ nav }) {
+export function LeaderboardScreen({ nav, showSnack }) {
   const [tab, setTab] = useState("batting");
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -259,17 +210,21 @@ export function LeaderboardScreen({ nav }) {
       )}
 
       {!loading && players.map((p, i) => (
-        <div key={p.id} onClick={() => {
-          api.getPlayerStats(p.id)
-            .then((fullData) => setSelectedPlayer(fullData))
-            .catch(() => alert("Failed to load player details"));
-        }} style={{
-          background: C.card,
-          border: `1px solid ${i < 3 ? medals[i] + "44" : C.border}`,
-          borderRadius: 12, padding: "13px 16px",
-          display: "flex", alignItems: "center", gap: 12,
-          marginBottom: 8, cursor: "pointer", fontFamily: font,
-        }}>
+        <div
+          key={p.id}
+          onClick={() => {
+            api.getPlayerStats(p.id)
+              .then((fullData) => setSelectedPlayer(fullData))
+              .catch(() => showSnack("Failed to load player details.", "error"));
+          }}
+          style={{
+            background: C.card,
+            border: `1px solid ${i < 3 ? medals[i] + "44" : C.border}`,
+            borderRadius: 12, padding: "13px 16px",
+            display: "flex", alignItems: "center", gap: 12,
+            marginBottom: 8, cursor: "pointer", fontFamily: font,
+          }}
+        >
           <div style={{ color: medals[i] || C.textMuted, fontWeight: 900, fontSize: i < 3 ? 20 : 16, width: 28, textAlign: "center" }}>
             {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
           </div>

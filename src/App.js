@@ -13,6 +13,7 @@ import { PlayersScreen, LeaderboardScreen } from "./screens/PlayersLeaderboard";
 import UnsyncedScreen from "./screens/UnsyncedScreen";
 import React, { useEffect } from "react";
 import api from "./api/api";
+import { useSnackbar, Snackbar } from "./components/Snackbar";
 
 export default function App() {
   const [screen, setScreen] = useState("Home");
@@ -21,13 +22,12 @@ export default function App() {
   const [match, setMatch] = useState(initMatch());
   const [innings1, setInnings1] = useState(null);
   const [unsynced, setUnsynced] = useState([]);
-
-  // Global player pool — persists across matches
   const [globalPlayers, setGlobalPlayers] = useState([]);
+
+  const { snack, show: showSnack, hide: hideSnack } = useSnackbar();
 
   const nav = useCallback((s) => setScreen(s), []);
 
-  // ── Match lifecycle ──────────────────────────────────────────────────────────
   const handleSetup = ({ battingTeam, bowlingTeam, batsman, bowler }) => {
     setMatch({ ...initMatch(), innings: 1, battingTeam, bowlingTeam, batsman, bowler });
   };
@@ -35,19 +35,15 @@ export default function App() {
   useEffect(() => {
     api.getPlayers()
       .then(data => setGlobalPlayers(data))
-      .catch(() => console.log("Failed to load players"));
+      .catch(() => showSnack("Failed to load players", "error"));
   }, []);
 
-  // ── handleBall ───────────────────────────────────────────────────────────────
   const handleBall = useCallback((type) => {
     setMatch((prev) => {
       if (type === "REBALL") {
         return {
           ...prev,
-          balls: [
-            ...prev.balls,
-            { run: 0, wicket: false, reball: true, snapshot: null }
-          ]
+          balls: [...prev.balls, { run: 0, wicket: false, reball: true, snapshot: null }]
         };
       }
 
@@ -72,7 +68,6 @@ export default function App() {
       if (type === "WICKET") bowl.wickets++;
       if (type === "TOUCH") bowl.runsConceded++;
 
-      // Update teams state
       setTeams(prevTeams => {
         const updatePlayers = (players) =>
           players.map(p => {
@@ -89,46 +84,31 @@ export default function App() {
 
       return {
         ...prev,
-        score: ns,
-        wickets: nw,
-        ball: nb,
-        over: no,
-        // Each ball stores a snapshot of PREVIOUS state so undo can restore it
+        score: ns, wickets: nw, ball: nb, over: no,
         balls: [...prev.balls, {
           run: type === "TOUCH" ? 1 : 0,
           wicket: type === "WICKET",
           reball: false,
           snapshot: {
-            score: prev.score,
-            wickets: prev.wickets,
-            ball: prev.ball,
-            over: prev.over,
-            batsman: { ...prev.batsman },
-            bowler: { ...prev.bowler },
+            score: prev.score, wickets: prev.wickets,
+            ball: prev.ball, over: prev.over,
+            batsman: { ...prev.batsman }, bowler: { ...prev.bowler },
           }
         }],
-        batsman: bat,
-        bowler: bowl,
+        batsman: bat, bowler: bowl,
       };
     });
   }, []);
 
-  // ── handleUndoBall ───────────────────────────────────────────────────────────
   const handleUndoBall = useCallback(() => {
     setMatch((prev) => {
       if (!prev.balls || prev.balls.length === 0) return prev;
-
       const balls = [...prev.balls];
-      const lastBall = balls.pop(); // remove last ball
-
-      // If it was a reball (no snapshot), just remove the ball entry
-      if (lastBall.reball || !lastBall.snapshot) {
-        return { ...prev, balls };
-      }
+      const lastBall = balls.pop();
+      if (lastBall.reball || !lastBall.snapshot) return { ...prev, balls };
 
       const { score, wickets, ball, over, batsman, bowler } = lastBall.snapshot;
 
-      // Restore teams state with snapshotted batsman/bowler stats
       setTeams(prevTeams => {
         const updatePlayers = (players) =>
           players.map(p => {
@@ -143,28 +123,17 @@ export default function App() {
         };
       });
 
-      return {
-        ...prev,
-        score,
-        wickets,
-        ball,
-        over,
-        batsman: { ...batsman, out: false }, // restore batsman (undo wicket)
-        bowler,
-        balls,
-      };
+      return { ...prev, score, wickets, ball, over, batsman: { ...batsman, out: false }, bowler, balls };
     });
   }, []);
 
-  // ── Bowler / Batsman change ──────────────────────────────────────────────────
   const handleBowlerChange = (p) => setMatch((prev) => ({ ...prev, bowler: p }));
   const handleBatsmanChange = (p) => setMatch((prev) => ({ ...prev, batsman: p }));
 
   const handleInningsEnd = () => {
     setInnings1(match);
     setMatch(prev => ({
-      ...initMatch(),
-      innings: 2,
+      ...initMatch(), innings: 2,
       battingTeam: prev.bowlingTeam,
       bowlingTeam: prev.battingTeam,
       target: prev.score
@@ -182,15 +151,13 @@ export default function App() {
   const handleSaveMatch = async () => {
     try {
       const payload = api.buildPerformancePayload(teams);
-      console.log("SYNC PAYLOAD:", JSON.stringify(payload, null, 2));
       await api.syncPerformance(payload);
-      alert("Player stats synced successfully!");
-    } catch (err) {
-      alert("Sync failed");
+      showSnack("Player stats synced successfully!", "success");
+    } catch {
+      showSnack("Sync failed. Please try again.", "error");
     }
   };
 
-  // ── Team management ──────────────────────────────────────────────────────────
   const handleTeamSave = (newTeams) => setTeams(newTeams);
 
   const handleLoadPrev = () => {
@@ -204,7 +171,6 @@ export default function App() {
 
   const handleNewMatch = () => setTeams(emptyTeams());
 
-  // ── Global player pool management ────────────────────────────────────────────
   const handleAddPlayerToPool = (playerFromBackend) =>
     setGlobalPlayers(prev => [
       ...prev,
@@ -220,77 +186,44 @@ export default function App() {
   const handleDelPlayerFromPool = (i) =>
     setGlobalPlayers((p) => p.filter((_, idx) => idx !== i));
 
-  // All players for leaderboard
   const allTeamPlayers = [...teams.team1.players, ...teams.team2.players];
   const leaderboardPlayers = globalPlayers.map((gp) => {
     const teamMatch = allTeamPlayers.find((tp) => tp.id === gp.id);
     return teamMatch || gp;
   });
 
-  // ── Screen map ───────────────────────────────────────────────────────────────
   const screens = {
     Home: <HomeScreen nav={nav} prevMatch={prevTeams} unsyncedCount={unsynced.length} />,
 
     StartMatch: (
       <StartMatchScreen
-        nav={nav}
-        prevMatch={prevTeams}
-        onLoadPrev={handleLoadPrev}
-        onModifyPrev={handleLoadPrev}
-        onNewMatch={handleNewMatch}
+        nav={nav} prevMatch={prevTeams}
+        onLoadPrev={handleLoadPrev} onModifyPrev={handleLoadPrev} onNewMatch={handleNewMatch}
       />
     ),
 
     TeamSetup: (
-      <TeamSetupScreen
-        nav={nav}
-        teams={teams}
-        globalPlayers={globalPlayers}
-        onSave={handleTeamSave}
-      />
+      <TeamSetupScreen nav={nav} teams={teams} globalPlayers={globalPlayers} onSave={handleTeamSave} />
     ),
 
-    MatchSetup: (
-      <MatchSetupScreen
-        nav={nav}
-        teams={teams}
-        onSetup={handleSetup}
-      />
-    ),
+    MatchSetup: <MatchSetupScreen nav={nav} teams={teams} onSetup={handleSetup} />,
 
     LiveMatch: (
       <LiveMatchScreen
-        nav={nav}
-        teams={teams}
-        matchState={match}
-        onBall={handleBall}
-        onUndoBall={handleUndoBall}
-        onBowlerChange={handleBowlerChange}
-        onBatsmanChange={handleBatsmanChange}
-        onInningsEnd={handleInningsEnd}
-        onMatchEnd={handleMatchEnd}
+        nav={nav} teams={teams} matchState={match}
+        onBall={handleBall} onUndoBall={handleUndoBall}
+        onBowlerChange={handleBowlerChange} onBatsmanChange={handleBatsmanChange}
+        onInningsEnd={handleInningsEnd} onMatchEnd={handleMatchEnd}
       />
     ),
 
-    MatchSetup2: (
-      <MatchSetup2Screen
-        nav={nav}
-        teams={teams}
-        matchState={match}
-        onSetup2={handleSetup2}
-      />
-    ),
+    MatchSetup2: <MatchSetup2Screen nav={nav} teams={teams} matchState={match} onSetup2={handleSetup2} />,
 
     MatchSummary: (
       <MatchSummaryScreen
-        nav={nav}
-        teams={teams}
-        matchState={match}
-        innings1Stats={innings1}
-        onSave={handleSaveMatch}
-        onSameTeams={handleLoadPrev}
-        onModify={handleLoadPrev}
-        onNew={handleNewMatch}
+        nav={nav} teams={teams} matchState={match} innings1Stats={innings1}
+        onSave={handleSaveMatch} onSameTeams={handleLoadPrev}
+        onModify={handleLoadPrev} onNew={handleNewMatch}
       />
     ),
 
@@ -300,20 +233,15 @@ export default function App() {
         globalPlayers={globalPlayers}
         onAdd={handleAddPlayerToPool}
         onDel={handleDelPlayerFromPool}
+        showSnack={showSnack}
       />
     ),
 
-    Leaderboard: (
-      <LeaderboardScreen
-        nav={nav}
-        players={leaderboardPlayers}
-      />
-    ),
+    Leaderboard: <LeaderboardScreen nav={nav} players={leaderboardPlayers} showSnack={showSnack} />,
 
     UnsyncedMatches: (
       <UnsyncedScreen
-        nav={nav}
-        unsynced={unsynced}
+        nav={nav} unsynced={unsynced}
         onSync={(i) => setUnsynced((p) => p.filter((_, idx) => idx !== i))}
         onDel={(i) => setUnsynced((p) => p.filter((_, idx) => idx !== i))}
       />
@@ -322,17 +250,21 @@ export default function App() {
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: font, color: C.text }}>
-      {/* Status bar */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "10px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
+      <div style={{
+        background: C.surface, borderBottom: `1px solid ${C.border}`,
+        padding: "10px 20px", display: "flex", justifyContent: "space-between",
+        alignItems: "center", position: "sticky", top: 0, zIndex: 50,
+      }}>
         <div style={{ color: C.text, fontWeight: 800, fontSize: 14, letterSpacing: 1, fontFamily: font }}>GPL Cricket</div>
         <div style={{ color: C.textMuted, fontSize: 12, fontFamily: font }}>{screen.replace(/([A-Z])/g, " $1").trim()}</div>
         <div style={{ display: "flex", gap: 8, color: C.textMuted, fontSize: 12, fontFamily: font }}>📶 🔋</div>
       </div>
 
-      {/* Screen content */}
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px 100px" }}>
         {screens[screen] || screens.Home}
       </div>
+
+      <Snackbar snack={snack} onHide={hideSnack} />
     </div>
   );
 }
