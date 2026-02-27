@@ -73,8 +73,8 @@ export function MatchSetup2Screen({ nav, teams, matchState, onSetup2 }) {
       <SectionTitle title="2nd Innings Setup" sub="Choose openers for the chase" />
       <div style={{ background: C.green + "15", border: `1px solid ${C.green}33`, borderRadius: 14, padding: "16px 18px", marginBottom: 20, textAlign: "center", fontFamily: font }}>
         <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 4 }}>TARGET</div>
-        <div style={{ color: C.green, fontWeight: 900, fontSize: 36 }}>{matchState.score + 1}</div>
-        <div style={{ color: C.textMuted, fontSize: 13 }}>{teams[battingTeamKey].name} need {matchState.score + 1} in {teams.overs} overs</div>
+        <div style={{ color: C.green, fontWeight: 900, fontSize: 36 }}>{matchState.target + 1}</div>
+        <div style={{ color: C.textMuted, fontSize: 13 }}>{teams[battingTeamKey].name} need {matchState.target + 1} in {teams.overs} overs</div>
       </div>
       <div style={{ marginBottom: 12 }}>
         <Lbl>Opening Batsman — {teams[battingTeamKey].name} (chasing)</Lbl>
