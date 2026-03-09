@@ -1,97 +1,208 @@
-const API_BASE = "https://gpl-backend-5j75.onrender.com/api";
+import { supabase } from "../lib/supabaseClient";
+
 const api = {
 
   // ===============================
-  // SYNC MATCH PERFORMANCE
-  // ===============================
-  syncPerformance: async (performances) => {
-    const res = await fetch(`${API_BASE}/players/performance`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(performances),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("Sync error:", text);
-      throw new Error("Sync failed");
-    }
-
-    return res.text(); // backend returns String
-  },
-
-  // ===============================
-  // FETCH PLAYER POOL
+  // FETCH PLAYERS
   // ===============================
   getPlayers: async () => {
-    const res = await fetch(`${API_BASE}/players`);
-    if (!res.ok) throw new Error("Failed to load players");
-    return res.json();
+    const { data, error } = await supabase
+      .from("player")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to load players");
+    }
+
+    return data;
   },
 
   // ===============================
   // CREATE PLAYER
   // ===============================
   createPlayer: async (name) => {
-    const res = await fetch(`${API_BASE}/players`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        role: "ALL_ROUNDER"
-      }),
-    });
+    const { data, error } = await supabase
+      .from("player")
+      .insert([
+        {
+          name,
+          role: "ALL_ROUNDER",
+          total_runs: 0,
+          total_wickets: 0,
+          total_balls_faced: 0,
+          total_balls_bowled: 0,
+          total_runs_conceded: 0,
+          total_innings: 0,
+          total_not_outs: 0
+        }
+      ])
+      .select()
+      .single();
 
-    if (!res.ok) throw new Error("Failed to create player");
-    return res.json();
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to create player");
+    }
+
+    return data;
   },
 
   // ===============================
   // DELETE PLAYER
   // ===============================
   deletePlayer: async (id) => {
-    const res = await fetch(`${API_BASE}/players/${id}`, {
-      method: "DELETE"
-    });
+    const { error } = await supabase
+      .from("player")
+      .delete()
+      .eq("id", id);
 
-    if (!res.ok) throw new Error("Failed to delete player");
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to delete player");
+    }
+  },
+
+  // ===============================
+  // UPDATE PERFORMANCE
+  // ===============================
+  syncPerformance: async (performances) => {
+    for (const p of performances) {
+  
+      console.log("Processing player:", p.playerId);
+  
+      // 1️⃣ Fetch existing player
+      const { data: existing, error: fetchError } = await supabase
+        .from("player")
+        .select("*")
+        .eq("id", p.playerId)
+        .single();
+  
+      if (fetchError) {
+        console.error("FETCH ERROR:", fetchError);
+        throw fetchError;
+      }
+  
+      if (!existing) {
+        console.error("No player found with ID:", p.playerId);
+        continue;
+      }
+  
+      // 2️⃣ Build updated object
+      const updated = {
+        total_runs: (existing.total_runs || 0) + (p.runs || 0),
+        total_balls_faced: (existing.total_balls_faced || 0) + (p.ballsFaced || 0),
+        total_balls_bowled: (existing.total_balls_bowled || 0) + (p.ballsBowled || 0),
+        total_runs_conceded: (existing.total_runs_conceded || 0) + (p.runsConceded || 0),
+        total_wickets: (existing.total_wickets || 0) + (p.wickets || 0),
+        total_innings: (existing.total_innings || 0) + (p.ballsFaced > 0 ? 1 : 0),
+        total_not_outs: (existing.total_not_outs || 0) + (!p.out && p.ballsFaced > 0 ? 1 : 0)
+      };
+  
+      console.log("Updating with:", updated);
+  
+      // 3️⃣ Update
+      const { data: updateData, error: updateError } = await supabase
+        .from("player")
+        .update(updated)
+        .eq("id", p.playerId)
+        .select(); // return updated row
+  
+      if (updateError) {
+        console.error("UPDATE ERROR:", updateError);
+        throw updateError;
+      }
+  
+      console.log("Updated row:", updateData);
+    }
+  
+    return "Synced successfully";
   },
 
   // ===============================
   // PLAYER PROFILE
   // ===============================
   getPlayerStats: async (id) => {
-    const res = await fetch(`${API_BASE}/players/${id}`);
-    if (!res.ok) throw new Error("Failed to fetch player stats");
-    return res.json();
+    const { data, error } = await supabase
+      .from("player")
+      .select("*")
+      .eq("id", id)
+      .single();
+  
+    if (error) throw error;
+  
+    return {
+      id: data.id,
+      name: data.name,
+      totalRuns: data.total_runs || 0,
+      totalBallsFaced: data.total_balls_faced || 0,
+      totalBallsBowled: data.total_balls_bowled || 0,
+      totalRunsConceded: data.total_runs_conceded || 0,
+      totalWickets: data.total_wickets || 0,
+      totalMatches: data.total_innings || 0,
+  
+      strikeRate: data.total_balls_faced > 0
+        ? (data.total_runs / data.total_balls_faced) * 100
+        : 0,
+  
+      battingAverage: (data.total_innings - data.total_not_outs) > 0
+        ? data.total_runs / (data.total_innings - data.total_not_outs)
+        : data.total_runs,
+  
+      economy: data.total_balls_bowled > 0
+        ? (data.total_runs_conceded / (data.total_balls_bowled / 6))
+        : 0,
+  
+      bowlingAverage: data.total_wickets > 0
+        ? data.total_runs_conceded / data.total_wickets
+        : 0
+    };
   },
 
   // ===============================
   // LEADERBOARD
   // ===============================
   getLeaderboard: async (type = "batting") => {
-    const res = await fetch(`${API_BASE}/leaderboard/${type}`);
-    if (!res.ok) throw new Error("Failed to load leaderboard");
-    return res.json();
-  },
-
-  // ===============================
-  // BUILD MATCH PAYLOAD
-  // ===============================
-  buildPerformancePayload: (teams) => {
-    return [
-      ...teams.team1.players,
-      ...teams.team2.players
-    ].map(p => ({
-      playerId: p.id,
-      runs: p.runs || 0,
-      ballsFaced: p.balls || 0,
-      ballsBowled: p.ballsBowled || 0,
-      runsConceded: p.runsConceded || 0,
-      wickets: p.wickets || 0,
-      out: p.out || false
+    const { data, error } = await supabase
+      .from("player")
+      .select("*");
+  
+    if (error) throw error;
+  
+    const normalized = data.map(p => ({
+      id: p.id,
+      name: p.name,
+      totalRuns: p.total_runs || 0,
+      totalBallsFaced: p.total_balls_faced || 0,
+      totalBallsBowled: p.total_balls_bowled || 0,
+      totalRunsConceded: p.total_runs_conceded || 0,
+      totalWickets: p.total_wickets || 0,
+      totalMatches: p.total_innings || 0,
+  
+      strikeRate: p.total_balls_faced > 0
+        ? (p.total_runs / p.total_balls_faced) * 100
+        : 0,
+  
+      battingAverage: (p.total_innings - p.total_not_outs) > 0
+        ? p.total_runs / (p.total_innings - p.total_not_outs)
+        : p.total_runs,
+  
+      economy: p.total_balls_bowled > 0
+        ? (p.total_runs_conceded / (p.total_balls_bowled / 6))
+        : 0,
+  
+      bowlingAverage: p.total_wickets > 0
+        ? p.total_runs_conceded / p.total_wickets
+        : 0
     }));
-  }
+  
+    if (type === "batting") {
+      return normalized.sort((a, b) => b.totalRuns - a.totalRuns);
+    } else {
+      return normalized.sort((a, b) => b.totalWickets - a.totalWickets);
+    }
+  },
 };
 
 export default api;

@@ -25,7 +25,6 @@ function BallBubble({ b, size = 28 }) {
 function OversDisplay({ balls }) {
   if (!balls || balls.length === 0) return null;
 
-  // Group into overs: each over ends after 6 legal (non-reball) balls
   const overs = [];
   let currentOver = [];
   let overNum = 0;
@@ -44,7 +43,6 @@ function OversDisplay({ balls }) {
     overs.push({ num: overNum, balls: currentOver, current: true });
   }
 
-  // Show last 3 overs
   const visible = overs.slice(-3);
 
   return (
@@ -69,7 +67,6 @@ function OversDisplay({ balls }) {
 
         return (
           <div key={ov.num} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Over label */}
             <div style={{
               minWidth: 38, color: ov.current ? C.blue : C.textMuted,
               fontSize: 11, fontWeight: 700, fontFamily: font,
@@ -80,10 +77,8 @@ function OversDisplay({ balls }) {
               )}
             </div>
 
-            {/* Ball bubbles */}
             <div style={{ display: "flex", gap: 5, flexWrap: "nowrap" }}>
               {ov.balls.map((b, i) => <BallBubble key={i} b={b} size={26} />)}
-              {/* Placeholder empty slots for current over */}
               {ov.current && Array.from({ length: Math.max(0, 6 - legalBalls) }).map((_, i) => (
                 <div key={"e" + i} style={{
                   width: 26, height: 26, borderRadius: "50%",
@@ -92,7 +87,6 @@ function OversDisplay({ balls }) {
               ))}
             </div>
 
-            {/* Summary for completed overs */}
             {!ov.current && (
               <div style={{
                 marginLeft: "auto", color: C.textMuted,
@@ -114,11 +108,33 @@ export default function LiveMatchScreen({
   onBall, onUndoBall,
   onBowlerChange, onBatsmanChange,
   onInningsEnd, onMatchEnd,
+  jokers = [],
 }) {
-  const { innings, battingTeam, bowlingTeam, batsman, bowler, score, wickets, over, ball, balls, target } = matchState;
+  const {
+    innings, battingTeam, bowlingTeam,
+    batsman, bowler, score, wickets, over, ball, balls, target,
+  } = matchState;
+
   const batting = teams[battingTeam];
   const bowling = teams[bowlingTeam];
   const [modal, setModal] = useState(null);
+
+  // ─── Joker pool merging ───────────────────────────────────────────────────
+  // A joker can bat OR bowl for either team.
+  // We merge them into whichever pool they aren't already in.
+  const jokerIds = new Set(jokers.map(j => j.id));
+
+  // battingPool: batting team players + any joker currently on the bowling team
+  const battingPool = [
+    ...batting.players,
+    ...bowling.players.filter(p => jokerIds.has(p.id) && !batting.players.find(b => b.id === p.id)),
+  ];
+
+  // bowlingPool: bowling team players + any joker currently on the batting team
+  const bowlingPool = [
+    ...bowling.players,
+    ...batting.players.filter(p => jokerIds.has(p.id) && !bowling.players.find(b => b.id === p.id)),
+  ];
 
   const totalBalls = teams.overs * 6;
   const ballsBowled = over * 6 + ball;
@@ -142,8 +158,9 @@ export default function LiveMatchScreen({
     onBall(type);
 
     if (type === "WICKET") {
-      if (projWickets >= batting.players.length) { setTimeout(doInningsEnd, 300); return; }
-      const outIds = batting.players.filter(p => p.out).map(p => p.id);
+      // Use battingPool size so joker is counted correctly
+      if (projWickets >= battingPool.length) { setTimeout(doInningsEnd, 300); return; }
+      const outIds = battingPool.filter(p => p.out).map(p => p.id);
       setModal({ type: "batsman", exclude: [...outIds, batsman.id], reason: "wicket" });
       return;
     }
@@ -181,7 +198,6 @@ export default function LiveMatchScreen({
           <div style={{ color: C.textSub, fontSize: 13, fontFamily: font }}>Overs {over}.{ball}/{teams.overs}</div>
           <div style={{ color: C.textMuted, fontSize: 12, fontFamily: font }}>{totalBalls - ballsBowled}b left</div>
         </div>
-        {/* Progress bar */}
         <div style={{ height: 4, background: C.border, borderRadius: 4, marginTop: 10, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.green}, ${C.blue})`, borderRadius: 4, transition: "width 0.3s" }} />
         </div>
@@ -193,13 +209,18 @@ export default function LiveMatchScreen({
         {/* Batsman card */}
         <Card style={{ padding: 14, position: "relative" }}>
           <div style={{ color: C.textMuted, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 4, fontFamily: font }}>🏏 Batting</div>
-          <div style={{ color: C.text, fontWeight: 700, fontSize: 14, fontFamily: font }}>{batsman?.name || "—"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ color: C.text, fontWeight: 700, fontSize: 14, fontFamily: font }}>{batsman?.name || "—"}</div>
+            {batsman?.isJoker && (
+              <span style={{ fontSize: 9, color: "#a78bfa", fontWeight: 700, background: "#a78bfa22", borderRadius: 4, padding: "1px 4px" }}>🃏</span>
+            )}
+          </div>
           <div style={{ color: C.green, fontSize: 11, marginTop: 3, fontFamily: font }}>
             {batsman?.runs || 0}R · {batsman?.balls || 0}B
           </div>
           <button
             onClick={() => {
-              const outIds = batting.players.filter(p => p.out).map(p => p.id);
+              const outIds = battingPool.filter(p => p.out).map(p => p.id);
               setModal({ type: "batsman", exclude: outIds, reason: "swap" });
             }}
             style={{
@@ -216,7 +237,12 @@ export default function LiveMatchScreen({
         {/* Bowler card */}
         <Card style={{ padding: 14, position: "relative" }}>
           <div style={{ color: C.textMuted, fontSize: 10, fontWeight: 700, letterSpacing: 1, marginBottom: 4, fontFamily: font }}>⚡ Bowling</div>
-          <div style={{ color: C.text, fontWeight: 700, fontSize: 14, fontFamily: font }}>{bowler?.name || "—"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ color: C.text, fontWeight: 700, fontSize: 14, fontFamily: font }}>{bowler?.name || "—"}</div>
+            {bowler?.isJoker && (
+              <span style={{ fontSize: 9, color: "#a78bfa", fontWeight: 700, background: "#a78bfa22", borderRadius: 4, padding: "1px 4px" }}>🃏</span>
+            )}
+          </div>
           <div style={{ color: C.red, fontSize: 11, marginTop: 3, fontFamily: font }}>
             {bowler?.wickets || 0}W · {bowler?.oversBowled || 0}ov
           </div>
@@ -266,9 +292,10 @@ export default function LiveMatchScreen({
       <Btn label="End Match" color={C.red} outline onClick={() => onMatchEnd()} />
 
       {/* ── Bowler Change Modal ──────────────────────────────── */}
+      {/* filterOut=false: bowlers don't get dismissed, the .out flag must not hide them */}
       <Modal visible={modal?.type === "bowler"}>
         <PlayerSelector
-          players={bowling.players}
+          players={bowlingPool}
           exclude={modal?.midOver ? [] : (modal?.lastBowler ? [modal.lastBowler] : [])}
           title={modal?.midOver ? "Change Bowler (Mid-Over)" : "Change Bowler"}
           subtitle={
@@ -276,6 +303,7 @@ export default function LiveMatchScreen({
               ? "Changing bowler mid-over"
               : "Same bowler can't bowl consecutive overs"
           }
+          filterOut={false}
           onSelect={(p) => { onBowlerChange(p); setModal(null); }}
         />
         <Btn
@@ -287,9 +315,10 @@ export default function LiveMatchScreen({
       </Modal>
 
       {/* ── Batsman Change Modal ─────────────────────────────── */}
+      {/* filterOut=true (default): dismissed batsmen are correctly hidden */}
       <Modal visible={modal?.type === "batsman"}>
         <PlayerSelector
-          players={batting.players}
+          players={battingPool}
           exclude={modal?.exclude || []}
           title={modal?.reason === "wicket" ? "New Batsman" : "Change Batsman"}
           subtitle={
@@ -297,6 +326,7 @@ export default function LiveMatchScreen({
               ? "Select next batsman"
               : "Swap current batsman (dismissed players excluded)"
           }
+          filterOut={true}
           onSelect={(p) => { onBatsmanChange(p); setModal(null); }}
         />
         {modal?.reason === "swap" && (

@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { C, font } from "./utils/theme";
 import { emptyTeams, initMatch, resetPlayer } from "./utils/helpers";
+import { buildPerformancePayload } from "./utils/helpers";
 
 // Screens
 import HomeScreen from "./screens/HomeScreen";
@@ -130,13 +131,30 @@ export default function App() {
   const handleBowlerChange = (p) => setMatch((prev) => ({ ...prev, bowler: p }));
   const handleBatsmanChange = (p) => setMatch((prev) => ({ ...prev, batsman: p }));
 
+  // ─── KEY FIX: reset `out` on all players when innings flips ───────────────
+  // Without this, innings-1 batting team players keep out:true and get
+  // filtered out of the bowler selector in innings 2 by PlayerSelector's
+  // `!p.out` check — making the bowler modal show "No players available".
   const handleInningsEnd = () => {
     setInnings1(match);
+
+    setTeams(prev => ({
+      ...prev,
+      team1: {
+        ...prev.team1,
+        players: prev.team1.players.map(p => ({ ...p, out: false })),
+      },
+      team2: {
+        ...prev.team2,
+        players: prev.team2.players.map(p => ({ ...p, out: false })),
+      },
+    }));
+
     setMatch(prev => ({
       ...initMatch(), innings: 2,
       battingTeam: prev.bowlingTeam,
       bowlingTeam: prev.battingTeam,
-      target: prev.score
+      target: prev.score,
     }));
   };
 
@@ -150,10 +168,13 @@ export default function App() {
 
   const handleSaveMatch = async () => {
     try {
-      const payload = api.buildPerformancePayload(teams);
+      const payload = buildPerformancePayload(teams);
+      console.log("SYNC PAYLOAD:", payload);
       await api.syncPerformance(payload);
+      console.log("SYNC SUCCESS");
       showSnack("Player stats synced successfully!", "success");
-    } catch {
+    } catch (err) {
+      console.error("SYNC ERROR:", err);
       showSnack("Sync failed. Please try again.", "error");
     }
   };
@@ -178,19 +199,41 @@ export default function App() {
         id: playerFromBackend.id,
         name: playerFromBackend.name,
         role: playerFromBackend.role,
+        isJoker: false,
         totalRuns: playerFromBackend.totalRuns ?? 0,
-        totalWickets: playerFromBackend.totalWickets ?? 0
+        totalWickets: playerFromBackend.totalWickets ?? 0,
       }
     ]);
 
   const handleDelPlayerFromPool = (i) =>
     setGlobalPlayers((p) => p.filter((_, idx) => idx !== i));
 
+  // ─── Joker toggle: flips isJoker on the player in the global pool ─────────
+  // Also syncs the flag into teams if the player is already selected,
+  // so the live-match joker badge and pool merging stay consistent.
+  const handleToggleJoker = (playerId) => {
+    setGlobalPlayers(prev =>
+      prev.map(p => p.id === playerId ? { ...p, isJoker: !p.isJoker } : p)
+    );
+    setTeams(prev => {
+      const toggle = (players) =>
+        players.map(p => p.id === playerId ? { ...p, isJoker: !p.isJoker } : p);
+      return {
+        ...prev,
+        team1: { ...prev.team1, players: toggle(prev.team1.players) },
+        team2: { ...prev.team2, players: toggle(prev.team2.players) },
+      };
+    });
+  };
+
   const allTeamPlayers = [...teams.team1.players, ...teams.team2.players];
   const leaderboardPlayers = globalPlayers.map((gp) => {
     const teamMatch = allTeamPlayers.find((tp) => tp.id === gp.id);
     return teamMatch || gp;
   });
+
+  // Jokers: pull from globalPlayers so the flag is always fresh
+  const jokers = globalPlayers.filter(p => p.isJoker);
 
   const screens = {
     Home: <HomeScreen nav={nav} prevMatch={prevTeams} unsyncedCount={unsynced.length} />,
@@ -214,6 +257,7 @@ export default function App() {
         onBall={handleBall} onUndoBall={handleUndoBall}
         onBowlerChange={handleBowlerChange} onBatsmanChange={handleBatsmanChange}
         onInningsEnd={handleInningsEnd} onMatchEnd={handleMatchEnd}
+        jokers={jokers}
       />
     ),
 
@@ -233,6 +277,7 @@ export default function App() {
         globalPlayers={globalPlayers}
         onAdd={handleAddPlayerToPool}
         onDel={handleDelPlayerFromPool}
+        onToggleJoker={handleToggleJoker}
         showSnack={showSnack}
       />
     ),

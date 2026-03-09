@@ -1,14 +1,7 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { C, font } from "../utils/theme";
 import { Btn, BackBtn, SectionTitle, Input, Badge, Lbl, Divider } from "../components/Primitives";
 
-/**
- * TeamSetupScreen
- * - Choose team names
- * - Pick players from globalPlayers pool (checkbox style)
- * - OR create new players on the fly (they also get added to pool via onAddGlobalPlayer)
- * - Set overs
- */
 export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
   const [t1Name, setT1Name] = useState(teams.team1.name || "");
   const [t2Name, setT2Name] = useState(teams.team2.name || "");
@@ -17,8 +10,28 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
   const [t2Selected, setT2Selected] = useState(new Set(teams.team2.players.map(p => p.id)));
 
   const overs = parseInt(oversInput) || 0;
-  const toggle = (set, setFn, id) => setFn(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  const canProceed = t1Name.trim() && t2Name.trim() && t1Selected.size >= 2 && t2Selected.size >= 2 && overs >= 1;
+
+  // Regular toggle for non-joker players — only affects the team being edited
+  const toggle = (setFn, id) =>
+    setFn(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+
+  // Joker toggle — ONE tap adds/removes them from BOTH teams simultaneously.
+  // "in both" → deselect both. Otherwise → add to both.
+  const toggleJoker = (id) => {
+    const inBoth = t1Selected.has(id) && t2Selected.has(id);
+    const op = (prev) => {
+      const next = new Set(prev);
+      inBoth ? next.delete(id) : next.add(id);
+      return next;
+    };
+    setT1Selected(op);
+    setT2Selected(op);
+  };
+
+  const canProceed =
+    t1Name.trim() && t2Name.trim() &&
+    t1Selected.size >= 2 && t2Selected.size >= 2 &&
+    overs >= 1;
 
   const handleSave = () => {
     const resolve = (selected) =>
@@ -26,14 +39,16 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
         .filter(p => selected.has(p.id))
         .map(p => ({
           ...p,
-          runs: 0,
-          balls: 0,
-          out: false,
-          wickets: 0,
-          runsConceded: 0,
-          ballsBowled: 0,
-          oversBowled: 0,
-        }));    onSave({ team1: { name: t1Name.trim(), players: resolve(t1Selected) }, team2: { name: t2Name.trim(), players: resolve(t2Selected) }, overs });
+          runs: 0, balls: 0, out: false,
+          wickets: 0, runsConceded: 0,
+          ballsBowled: 0, oversBowled: 0,
+        }));
+
+    onSave({
+      team1: { name: t1Name.trim(), players: resolve(t1Selected) },
+      team2: { name: t2Name.trim(), players: resolve(t2Selected) },
+      overs,
+    });
     nav("MatchSetup");
   };
 
@@ -42,31 +57,58 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
       <BackBtn onClick={() => nav("Home")} />
       <SectionTitle title="Team Setup" sub="Name teams and pick players from pool" />
 
-      {/* Overs — typed input */}
+      {/* Overs */}
       <div style={{ marginBottom: 20 }}>
         <Lbl>Overs per innings</Lbl>
         <input
-          type="number"
-          min="1"
-          placeholder="e.g. 5"
-          value={oversInput}
-          onChange={e => setOversInput(e.target.value)}
-          style={{ width: "100%", background: C.surface, border: `1.5px solid ${overs >= 1 ? C.green : C.border}`, borderRadius: 10, padding: "11px 13px", color: C.text, fontSize: 18, fontWeight: 800, outline: "none", boxSizing: "border-box", fontFamily: font }}
+          type="number" min="1" placeholder="e.g. 5"
+          value={oversInput} onChange={e => setOversInput(e.target.value)}
+          style={{
+            width: "100%", background: C.surface,
+            border: `1.5px solid ${overs >= 1 ? C.green : C.border}`,
+            borderRadius: 10, padding: "11px 13px",
+            color: C.text, fontSize: 18, fontWeight: 800,
+            outline: "none", boxSizing: "border-box", fontFamily: font,
+          }}
         />
-        {overs < 1 && oversInput !== "" && <div style={{ color: C.red, fontSize: 11, marginTop: 4, fontFamily: font }}>Enter at least 1 over</div>}
+        {overs < 1 && oversInput !== "" && (
+          <div style={{ color: C.red, fontSize: 11, marginTop: 4, fontFamily: font }}>
+            Enter at least 1 over
+          </div>
+        )}
       </div>
 
       <Divider />
 
-      {/* No players in pool warning */}
       {globalPlayers.length === 0 && (
-        <div style={{ background: C.yellow + "12", border: `1px solid ${C.yellow}33`, borderRadius: 12, padding: "14px 16px", marginBottom: 16, fontFamily: font }}>
+        <div style={{
+          background: C.yellow + "12", border: `1px solid ${C.yellow}33`,
+          borderRadius: 12, padding: "14px 16px", marginBottom: 16, fontFamily: font,
+        }}>
           <div style={{ color: C.yellow, fontWeight: 700, fontSize: 13 }}>⚠ No players in pool</div>
-          <div style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>Go to <strong style={{ color: C.blue }}>Manage Players</strong> from Home to add players first.</div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>
+            Go to <strong style={{ color: C.blue }}>Manage Players</strong> from Home to add players first.
+          </div>
         </div>
       )}
 
-      {/* Team sections */}
+      {/* Joker legend — only shown when a joker exists in pool */}
+      {globalPlayers.some(p => p.isJoker) && (
+        <div style={{
+          background: "#a78bfa15", border: "1px solid #a78bfa44",
+          borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+          display: "flex", alignItems: "center", gap: 8, fontFamily: font,
+        }}>
+          <span style={{ fontSize: 18 }}>🃏</span>
+          <div>
+            <div style={{ color: "#a78bfa", fontWeight: 700, fontSize: 12 }}>Joker Player</div>
+            <div style={{ color: C.textMuted, fontSize: 11 }}>
+              Tapping a Joker selects them for <strong style={{ color: "#a78bfa" }}>both teams</strong> at once
+            </div>
+          </div>
+        </div>
+      )}
+
       {[
         { n: 1, name: t1Name, setName: setT1Name, selected: t1Selected, setSelected: setT1Selected },
         { n: 2, name: t2Name, setName: setT2Name, selected: t2Selected, setSelected: setT2Selected },
@@ -75,27 +117,111 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
           <Input placeholder={`Team ${n} Name`} value={name} onChange={setName} style={{ marginBottom: 12 }} />
           <Lbl>
             Players for Team {n}&nbsp;
-            <span style={{ color: selected.size >= 2 ? C.green : C.blue, fontWeight: 700 }}>({selected.size} selected)</span>
+            <span style={{ color: selected.size >= 2 ? C.green : C.blue, fontWeight: 700 }}>
+              ({selected.size} selected)
+            </span>
           </Lbl>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {globalPlayers.map(p => {
               const sel = selected.has(p.id);
               const otherSelected = n === 1 ? t2Selected : t1Selected;
-              const lockedByOther = otherSelected.has(p.id);
+              // Non-jokers locked if picked by the other team
+              const lockedByOther = otherSelected.has(p.id) && !p.isJoker;
+              // Joker is "fully selected" only when present in both sets
+              const jokerInBoth = p.isJoker && t1Selected.has(p.id) && t2Selected.has(p.id);
+
+              const handleClick = () => {
+                if (lockedByOther) return;
+                if (p.isJoker) toggleJoker(p.id);   // joker: sync both teams
+                else toggle(setSelected, p.id);       // normal: just this team
+              };
+
               return (
-                <div key={p.id} onClick={() => !lockedByOther && toggle(selected, setSelected, p.id)} style={{ background: sel ? C.green + "18" : lockedByOther ? "#ffffff06" : C.surface, border: `1.5px solid ${sel ? C.green : lockedByOther ? C.border + "44" : C.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: lockedByOther ? "not-allowed" : "pointer", opacity: lockedByOther ? 0.35 : 1, fontFamily: font }}>
+                <div
+                  key={p.id}
+                  onClick={handleClick}
+                  style={{
+                    background: sel
+                      ? (p.isJoker ? "#a78bfa18" : C.green + "18")
+                      : lockedByOther ? "#ffffff06" : C.surface,
+                    border: `1.5px solid ${
+                      jokerInBoth ? "#a78bfa"
+                        : sel ? C.green
+                        : lockedByOther ? C.border + "44"
+                        : C.border
+                    }`,
+                    borderRadius: 10, padding: "10px 14px",
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    cursor: lockedByOther ? "not-allowed" : "pointer",
+                    opacity: lockedByOther ? 0.35 : 1,
+                    fontFamily: font,
+                  }}
+                >
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: sel ? C.green + "33" : C.borderBright, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, color: sel ? C.green : C.text }}>{String(p?.name || "?").charAt(0).toUpperCase()}</div>
-                    <span style={{ color: sel ? C.text : lockedByOther ? C.textMuted : C.text, fontSize: 14 }}>{p.name}</span>
+                    {/* Avatar */}
+                    <div style={{
+                      width: 30, height: 30, borderRadius: "50%",
+                      background: jokerInBoth ? "#a78bfa33" : sel ? C.green + "33" : C.borderBright,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: 700, fontSize: 13,
+                      color: jokerInBoth ? "#a78bfa" : sel ? C.green : C.text,
+                    }}>
+                      {String(p?.name || "?").charAt(0).toUpperCase()}
+                    </div>
+
+                    <div>
+                      {/* Name + badge */}
+                      <div style={{
+                        fontSize: 14, display: "flex", alignItems: "center", gap: 5,
+                        color: sel ? C.text : lockedByOther ? C.textMuted : C.text,
+                      }}>
+                        {p.name}
+                        {p.isJoker && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, color: "#a78bfa",
+                            background: "#a78bfa22", border: "1px solid #a78bfa44",
+                            borderRadius: 4, padding: "1px 4px",
+                          }}>
+                            🃏 JOKER
+                          </span>
+                        )}
+                      </div>
+                      {/* Hint line under joker name */}
+                      {p.isJoker && (
+                        <div style={{ color: "#a78bfa88", fontSize: 10, marginTop: 1 }}>
+                          {jokerInBoth ? "✓ Selected for both teams" : "Tap to add to both teams"}
+                        </div>
+                      )}
+                    </div>
                   </div>
+
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    {lockedByOther && <Badge color={C.textMuted}>In Team {n === 1 ? 2 : 1}</Badge>}
-                    {sel && <span style={{ color: C.green, fontSize: 18, fontWeight: 900 }}>✓</span>}
+                    {lockedByOther && (
+                      <Badge color={C.textMuted}>In Team {n === 1 ? 2 : 1}</Badge>
+                    )}
+                    {/* Joker: show "✓ Both" pill when fully selected */}
+                    {p.isJoker && jokerInBoth && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, color: "#a78bfa",
+                        background: "#a78bfa22", border: "1px solid #a78bfa55",
+                        borderRadius: 6, padding: "2px 7px",
+                      }}>
+                        ✓ Both
+                      </span>
+                    )}
+                    {/* Normal player: regular green checkmark */}
+                    {!p.isJoker && sel && (
+                      <span style={{ color: C.green, fontSize: 18, fontWeight: 900 }}>✓</span>
+                    )}
                   </div>
                 </div>
               );
             })}
-            {globalPlayers.length === 0 && <div style={{ color: C.textMuted, fontSize: 12, padding: "8px 0", fontFamily: font }}>No players available</div>}
+            {globalPlayers.length === 0 && (
+              <div style={{ color: C.textMuted, fontSize: 12, padding: "8px 0", fontFamily: font }}>
+                No players available
+              </div>
+            )}
           </div>
         </div>
       ))}
@@ -109,7 +235,14 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
           {overs < 1 && <div>• Enter valid overs count</div>}
         </div>
       )}
-      <Btn label="Continue to Match Setup →" color={C.green} disabled={!canProceed} onClick={handleSave} style={{ width: "100%", fontSize: 15 }} />
+
+      <Btn
+        label="Continue to Match Setup →"
+        color={C.green}
+        disabled={!canProceed}
+        onClick={handleSave}
+        style={{ width: "100%", fontSize: 15 }}
+      />
     </div>
   );
 }

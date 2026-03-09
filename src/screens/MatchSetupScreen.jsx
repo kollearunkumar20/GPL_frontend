@@ -75,7 +75,7 @@ export function MatchSetup2Screen({ nav, teams, matchState, onSetup2 }) {
         <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 4 }}>TARGET</div>
         <div style={{ color: C.green, fontWeight: 900, fontSize: 36 }}>{matchState.target + 1}</div>
         <div style={{ color: C.textMuted, fontSize: 13 }}>{teams[battingTeamKey].name} need {matchState.target + 1} in {teams.overs} overs</div>
-      </div>
+      </div>  ``
       <div style={{ marginBottom: 12 }}>
         <Lbl>Opening Batsman — {teams[battingTeamKey].name} (chasing)</Lbl>
         {teams[battingTeamKey].players.map(p => (

@@ -4,7 +4,7 @@ import { Btn, BackBtn, SectionTitle, Input } from "../components/Primitives";
 import api from "../api/api";
 import { PlayerProfile } from "./PlayerProfile";
 
-export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
+export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker, showSnack }) {
   const [name, setName] = useState("");
   const [show, setShow] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -48,6 +48,9 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
 
   const canSubmit = name.trim() && !nameError;
 
+  // How many jokers are currently set
+  const jokerCount = globalPlayers.filter(p => p.isJoker).length;
+
   return (
     <div>
       <BackBtn onClick={() => nav("Home")} />
@@ -60,6 +63,28 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
         />
       </div>
 
+      {/* ── Joker info banner (shows once any joker is set) ── */}
+      {jokerCount > 0 && (
+        <div style={{
+          background: "#a78bfa15", border: "1px solid #a78bfa44",
+          borderRadius: 10, padding: "10px 14px", marginBottom: 14,
+          display: "flex", alignItems: "center", gap: 10, fontFamily: font,
+        }}>
+          <span style={{ fontSize: 20 }}>🃏</span>
+          <div>
+            <div style={{ color: "#a78bfa", fontWeight: 700, fontSize: 12 }}>
+              {jokerCount === 1
+                ? `${globalPlayers.find(p => p.isJoker)?.name} is the Joker`
+                : `${jokerCount} Jokers set`}
+            </div>
+            <div style={{ color: C.textMuted, fontSize: 11, marginTop: 1 }}>
+              Joker can bat &amp; bowl for either team
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add player form ── */}
       {show && (
         <div style={{
           background: C.card,
@@ -106,6 +131,7 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
         </div>
       )}
 
+      {/* ── Player list ── */}
       {globalPlayers.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontFamily: font }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
@@ -117,34 +143,101 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
           {globalPlayers.map((p, i) => (
             <div
               key={p.id || i}
-              onClick={() => {
-                api.getPlayerStats(p.id)
-                  .then((fullData) => setSelectedPlayer(fullData))
-                  .catch(() => showSnack("Failed to load player details.", "error"));
-              }}
               style={{
-                background: C.card, border: `1px solid ${C.border}`,
+                background: p.isJoker ? "#a78bfa0e" : C.card,
+                border: `1px solid ${p.isJoker ? "#a78bfa55" : C.border}`,
                 borderRadius: 12, padding: "12px 14px",
                 display: "flex", alignItems: "center", gap: 12,
-                fontFamily: font, cursor: "pointer",
+                fontFamily: font,
               }}
             >
-              <div style={{
-                width: 36, height: 36, borderRadius: "50%",
-                background: `linear-gradient(135deg, ${C.blue}33, ${C.purple}33)`,
-                border: `1.5px solid ${C.blue}33`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontWeight: 700, color: C.blue, fontSize: 15,
-              }}>
+              {/* Avatar — tap to open profile */}
+              <div
+                onClick={() => {
+                  api.getPlayerStats(p.id)
+                    .then((fullData) => setSelectedPlayer(fullData))
+                    .catch(() => showSnack("Failed to load player details.", "error"));
+                }}
+                style={{
+                  width: 36, height: 36, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
+                  background: p.isJoker
+                    ? `linear-gradient(135deg, #a78bfa55, #7c3aed55)`
+                    : `linear-gradient(135deg, ${C.blue}33, ${C.purple}33)`,
+                  border: `1.5px solid ${p.isJoker ? "#a78bfa55" : C.blue + "33"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: 15,
+                  color: p.isJoker ? "#a78bfa" : C.blue,
+                }}
+              >
                 {String(p?.name || "?").charAt(0).toUpperCase()}
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ color: C.text, fontWeight: 600 }}>{p.name}</div>
+
+              {/* Name + stats — tap to open profile */}
+              <div
+                onClick={() => {
+                  api.getPlayerStats(p.id)
+                    .then((fullData) => setSelectedPlayer(fullData))
+                    .catch(() => showSnack("Failed to load player details.", "error"));
+                }}
+                style={{ flex: 1, cursor: "pointer" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: C.text, fontWeight: 600 }}>{p.name}</span>
+                  {p.isJoker && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, color: "#a78bfa",
+                      background: "#a78bfa22", border: "1px solid #a78bfa44",
+                      borderRadius: 4, padding: "1px 5px", letterSpacing: 0.5,
+                    }}>
+                      🃏 JOKER
+                    </span>
+                  )}
+                </div>
                 <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
                   {p.totalRuns || p.runs || 0}R · {p.totalWickets || p.wickets || 0}W
                 </div>
               </div>
-              <div style={{ color: C.textMuted, fontSize: 14 }}>›</div>
+
+              {/* ── Joker toggle button ── */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Only allow setting joker if none set yet, or this player is already the joker
+                  if (!p.isJoker && jokerCount >= 1) {
+                    showSnack("Only 1 Joker allowed. Remove the current Joker first.", "error");
+                    return;
+                  }
+                  onToggleJoker(p.id);
+                  showSnack(
+                    p.isJoker ? `${p.name} is no longer Joker` : `${p.name} is now the 🃏 Joker!`,
+                    p.isJoker ? "info" : "success"
+                  );
+                }}
+                style={{
+                  background: p.isJoker ? "#a78bfa22" : "transparent",
+                  border: `1.5px solid ${p.isJoker ? "#a78bfa" : C.border}`,
+                  borderRadius: 8,
+                  color: p.isJoker ? "#a78bfa" : C.textMuted,
+                  fontSize: 11, fontWeight: 700,
+                  padding: "5px 9px", cursor: "pointer",
+                  fontFamily: font, flexShrink: 0,
+                  transition: "all 0.15s",
+                }}
+              >
+                {p.isJoker ? "🃏 Joker" : "🃏"}
+              </button>
+
+              {/* Profile arrow */}
+              <div
+                onClick={() => {
+                  api.getPlayerStats(p.id)
+                    .then((fullData) => setSelectedPlayer(fullData))
+                    .catch(() => showSnack("Failed to load player details.", "error"));
+                }}
+                style={{ color: C.textMuted, fontSize: 14, cursor: "pointer" }}
+              >
+                ›
+              </div>
             </div>
           ))}
         </div>
