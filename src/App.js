@@ -37,7 +37,7 @@ export default function App() {
     api.getPlayers()
       .then(data => setGlobalPlayers(data))
       .catch(() => showSnack("Failed to load players", "error"));
-  }, []);
+  }, [showSnack]);
 
   const handleBall = useCallback((type) => {
     setMatch((prev) => {
