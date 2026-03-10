@@ -36,27 +36,41 @@ export const initMatch = () => ({
 /**
  * Builds the sync payload for Supabase.
  *
- * The Joker player exists in BOTH team1.players and team2.players,
- * so we deduplicate by id and SUM their stats across both sides.
- * This prevents double-counting their runs/wickets in the backend
- * and also silences the React duplicate-key warning in any list
- * that spreads both team arrays.
+ * Regular players  → stats passed through as-is.
+ * Joker player     → appears in BOTH team arrays, so we:
+ *                    1. Sum the two innings values
+ *                    2. Divide by 2 (average)
+ *                    3. Math.round so 0.5 → 1 (never loses a run/wicket to flooring)
+ *
+ * Example:
+ *   Innings 1: 3 runs, 1 wicket
+ *   Innings 2: 5 runs, 0 wickets
+ *   Synced:    Math.round((3+5)/2) = 4 runs, Math.round((1+0)/2) = 1 wicket
  */
 export const buildPerformancePayload = (teams) => {
   const all = [...teams.team1.players, ...teams.team2.players];
 
-  // Merge by id — if a player appears twice (joker), sum their stats
+  // Round-half-up helper
+  const avg = (a, b) => Math.round((a + b) / 2);
+
   const merged = {};
+
   for (const p of all) {
     if (!merged[p.id]) {
+      // First occurrence — store as-is
       merged[p.id] = { ...p };
     } else {
-      merged[p.id].runs         = (merged[p.id].runs         || 0) + (p.runs         || 0);
-      merged[p.id].balls        = (merged[p.id].balls        || 0) + (p.balls        || 0);
-      merged[p.id].wickets      = (merged[p.id].wickets      || 0) + (p.wickets      || 0);
-      merged[p.id].ballsBowled  = (merged[p.id].ballsBowled  || 0) + (p.ballsBowled  || 0);
-      merged[p.id].runsConceded = (merged[p.id].runsConceded || 0) + (p.runsConceded || 0);
-      merged[p.id].out          = merged[p.id].out || p.out;
+      // Second occurrence = joker appeared in both teams → average every stat
+      const m = merged[p.id];
+      merged[p.id] = {
+        ...m,
+        runs:         avg(m.runs         || 0, p.runs         || 0),
+        balls:        avg(m.balls        || 0, p.balls        || 0),
+        wickets:      avg(m.wickets      || 0, p.wickets      || 0),
+        ballsBowled:  avg(m.ballsBowled  || 0, p.ballsBowled  || 0),
+        runsConceded: avg(m.runsConceded || 0, p.runsConceded || 0),
+        out:          m.out || p.out,
+      };
     }
   }
 
@@ -73,8 +87,8 @@ export const buildPerformancePayload = (teams) => {
 
 /**
  * Deduplicates a merged array of players from both teams by id.
- * Use this anywhere you spread team1.players + team2.players into
- * a single React list to avoid the duplicate-key warning.
+ * Use anywhere you spread team1.players + team2.players into a
+ * single React list to avoid the duplicate-key warning.
  *
  * Usage:
  *   const allPlayers = dedupePlayers([...teams.team1.players, ...teams.team2.players]);
