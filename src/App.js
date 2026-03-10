@@ -12,6 +12,7 @@ import LiveMatchScreen from "./screens/LiveMatchScreen";
 import MatchSummaryScreen from "./screens/MatchSummaryScreen";
 import { PlayersScreen, LeaderboardScreen } from "./screens/PlayersLeaderboard";
 import UnsyncedScreen from "./screens/UnsyncedScreen";
+import AuthScreen from "./screens/AuthScreen";
 import React, { useEffect } from "react";
 import api from "./api/api";
 import { useSnackbar, Snackbar } from "./components/Snackbar";
@@ -24,6 +25,8 @@ export default function App() {
   const [innings1, setInnings1] = useState(null);
   const [unsynced, setUnsynced] = useState([]);
   const [globalPlayers, setGlobalPlayers] = useState([]);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const { snack, show: showSnack, hide: hideSnack } = useSnackbar();
 
@@ -34,10 +37,29 @@ export default function App() {
   };
 
   useEffect(() => {
-    api.getPlayers()
-      .then(data => setGlobalPlayers(data))
-      .catch(() => showSnack("Failed to load players", "error"));
-  }, [showSnack]);
+    // Check initial auth state
+    import("./lib/supabaseClient").then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setUser(session?.user ?? null);
+        setAuthLoading(false);
+      });
+
+      // Listen for auth changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+      });
+
+      return () => subscription.unsubscribe();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      api.getPlayers()
+        .then(data => setGlobalPlayers(data))
+        .catch(() => showSnack("Failed to load players", "error"));
+    }
+  }, [user, showSnack]);
 
   const handleBall = useCallback((type) => {
     setMatch((prev) => {
@@ -293,6 +315,28 @@ export default function App() {
     ),
   };
 
+  const handleLogout = async () => {
+    const { supabase } = await import("./lib/supabaseClient");
+    await supabase.auth.signOut();
+  };
+
+  if (authLoading) {
+    return (
+      <div style={{ background: C.bg, minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "center", color: C.text, fontFamily: font }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={{ background: C.bg, minHeight: "100vh" }}>
+        <AuthScreen />
+        <Snackbar snack={snack} onHide={hideSnack} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: font, color: C.text }}>
       <div style={{
@@ -302,7 +346,17 @@ export default function App() {
       }}>
         <div style={{ color: C.text, fontWeight: 800, fontSize: 14, letterSpacing: 1, fontFamily: font }}>GPL Cricket</div>
         <div style={{ color: C.textMuted, fontSize: 12, fontFamily: font }}>{screen.replace(/([A-Z])/g, " $1").trim()}</div>
-        <div style={{ display: "flex", gap: 8, color: C.textMuted, fontSize: 12, fontFamily: font }}>📶 🔋</div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, color: C.textMuted, fontSize: 12, fontFamily: font }}>📶 🔋</div>
+          <button 
+            onClick={handleLogout}
+            style={{ 
+              background: "transparent", border: "none", color: C.red, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: font 
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px 100px" }}>
