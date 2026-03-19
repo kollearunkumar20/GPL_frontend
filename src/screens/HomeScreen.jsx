@@ -270,6 +270,7 @@ export default function HomeScreen({ nav, prevMatch, unsyncedCount }) {
         <MenuBtn icon="🪙" label="Toss a Coin" sub="Decide who bats first" color={C.yellow} onClick={() => setShowToss(true)} />
         <MenuBtn icon="👥" label="Manage Players" sub="Add or remove players from pool" color={C.blue} onClick={() => nav("Players")} />
         <MenuBtn icon="🏆" label="Leaderboard" sub="Career stats and rankings" color={C.yellow} onClick={() => nav("Leaderboard")} />
+        <MenuBtn icon="📜" label="Match History" sub="View past matches and scorecards" color={C.blue} onClick={() => nav("MatchHistory")} />
         <div
           onClick={() => nav("UnsyncedMatches")}
           style={{

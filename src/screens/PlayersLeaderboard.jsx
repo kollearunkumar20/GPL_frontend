@@ -56,11 +56,14 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker,
       <BackBtn onClick={() => nav("Home")} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
         <SectionTitle title="Player Pool" sub={`${globalPlayers.length} players`} />
-        <Btn
-          label={show ? "Cancel" : "+ Add"}
-          sm color={C.blue}
-          onClick={() => { setShow(!show); setName(""); setNameError(""); }}
-        />
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn label="Compare" sm color={C.yellow} onClick={() => nav("Compare")} />
+          <Btn
+            label={show ? "Cancel" : "+ Add"}
+            sm color={C.blue}
+            onClick={() => { setShow(!show); setName(""); setNameError(""); }}
+          />
+        </div>
       </div>
 
       {/* ── Joker info banner (shows once any joker is set) ── */}

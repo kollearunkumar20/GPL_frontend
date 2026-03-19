@@ -121,6 +121,63 @@ const api = {
   },
 
   // ===============================
+  // MATCH OPERATIONS
+  // ===============================
+  saveMatch: async (matchPayload) => {
+    const { data, error } = await supabase
+      .from("matches")
+      .insert([matchPayload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to save match");
+    }
+    return data;
+  },
+
+  getMatchHistory: async () => {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("id, created_at, team1_name, team2_name, overs, toss_winner, toss_decision, winner, team1_score, team1_wickets, team2_score, team2_wickets, team1_overs, team2_overs, status")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to fetch match history");
+    }
+    return data;
+  },
+
+  getMatchDetails: async (id) => {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("match_data")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to fetch match details");
+    }
+    return data?.match_data;
+  },
+
+  getAllMatchData: async () => {
+    const { data, error } = await supabase
+      .from("matches")
+      .select("match_data")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      throw new Error("Failed to fetch all match data");
+    }
+    return data;
+  },
+
+  // ===============================
   // PLAYER PROFILE
   // ===============================
   getPlayerStats: async (id) => {

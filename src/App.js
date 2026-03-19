@@ -10,7 +10,10 @@ import TeamSetupScreen from "./screens/TeamSetupScreen";
 import { MatchSetupScreen, MatchSetup2Screen } from "./screens/MatchSetupScreen";
 import LiveMatchScreen from "./screens/LiveMatchScreen";
 import MatchSummaryScreen from "./screens/MatchSummaryScreen";
+import MatchHistoryScreen from "./screens/MatchHistoryScreen";
+import MatchDetailsScreen from "./screens/MatchDetailsScreen";
 import { PlayersScreen, LeaderboardScreen } from "./screens/PlayersLeaderboard";
+import ComparePlayersScreen from "./screens/ComparePlayersScreen.jsx";
 import UnsyncedScreen from "./screens/UnsyncedScreen";
 import AuthScreen from "./screens/AuthScreen";
 import React, { useEffect } from "react";
@@ -23,6 +26,7 @@ export default function App() {
   const [prevTeams, setPrevTeams] = useState(null);
   const [match, setMatch] = useState(initMatch());
   const [innings1, setInnings1] = useState(null);
+  const [selectedMatchId, setSelectedMatchId] = useState(null);
   const [unsynced, setUnsynced] = useState([]);
   const [globalPlayers, setGlobalPlayers] = useState([]);
   const [user, setUser] = useState(null);
@@ -193,8 +197,39 @@ export default function App() {
       const payload = buildPerformancePayload(teams);
       console.log("SYNC PAYLOAD:", payload);
       await api.syncPerformance(payload);
+
+      // Save match metadata AND deep JSON array
+      const team1BattedFirst = innings1 && innings1.battingTeam === "team1";
+      const t1s = team1BattedFirst ? innings1.score : match.score;
+      const t1w = team1BattedFirst ? innings1.wickets : match.wickets;
+      const t1o = team1BattedFirst ? `${innings1.over}.${innings1.ball}` : `${match.over}.${match.ball}`;
+      const t2s = team1BattedFirst ? match.score : innings1.score;
+      const t2w = team1BattedFirst ? match.wickets : innings1.wickets;
+      const t2o = team1BattedFirst ? `${match.over}.${match.ball}` : `${innings1.over}.${innings1.ball}`;
+
+      let winner = "Draw";
+      if (t1s > t2s) winner = teams.team1.name;
+      else if (t2s > t1s) winner = teams.team2.name;
+
+      const matchPayload = {
+        team1_name: teams.team1.name,
+        team2_name: teams.team2.name,
+        overs: teams.overs,
+        team1_score: t1s,
+        team1_wickets: t1w,
+        team2_score: t2s,
+        team2_wickets: t2w,
+        team1_overs: t1o,
+        team2_overs: t2o,
+        winner,
+        status: "completed",
+        match_data: { innings1, innings2: match, teams },
+      };
+
+      await api.saveMatch(matchPayload);
+
       console.log("SYNC SUCCESS");
-      showSnack("Player stats synced successfully!", "success");
+      showSnack("Match and player stats synced successfully!", "success");
     } catch (err) {
       console.error("SYNC ERROR:", err);
       showSnack("Sync failed. Please try again.", "error");
@@ -304,7 +339,13 @@ export default function App() {
       />
     ),
 
+    Compare: <ComparePlayersScreen nav={nav} globalPlayers={globalPlayers} showSnack={showSnack} />,
+
     Leaderboard: <LeaderboardScreen nav={nav} players={leaderboardPlayers} showSnack={showSnack} />,
+
+    MatchHistory: <MatchHistoryScreen nav={nav} onSelectMatch={(id) => { setSelectedMatchId(id); nav("MatchDetails"); }} />,
+
+    MatchDetails: <MatchDetailsScreen nav={nav} matchId={selectedMatchId} />,
 
     UnsyncedMatches: (
       <UnsyncedScreen
