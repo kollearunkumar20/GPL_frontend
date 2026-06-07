@@ -117,20 +117,19 @@ export default function LiveMatchScreen({
 
   const batting = teams[battingTeam];
   const bowling = teams[bowlingTeam];
+
   const [modal, setModal] = useState(null);
+  // ─── NEW: queue a modal to open after the current one closes ─────────────
+  const [pendingModal, setPendingModal] = useState(null);
 
   // ─── Joker pool merging ───────────────────────────────────────────────────
-  // A joker can bat OR bowl for either team.
-  // We merge them into whichever pool they aren't already in.
   const jokerIds = new Set(jokers.map(j => j.id));
 
-  // battingPool: batting team players + any joker currently on the bowling team
   const battingPool = [
     ...batting.players,
     ...bowling.players.filter(p => jokerIds.has(p.id) && !batting.players.find(b => b.id === p.id)),
   ];
 
-  // bowlingPool: bowling team players + any joker currently on the batting team
   const bowlingPool = [
     ...bowling.players,
     ...batting.players.filter(p => jokerIds.has(p.id) && !bowling.players.find(b => b.id === p.id)),
@@ -146,6 +145,7 @@ export default function LiveMatchScreen({
     else onMatchEnd();
   }, [innings, onMatchEnd]);
 
+  // ─── handleBall ──────────────────────────────────────────────────────────
   const handleBall = (type) => {
     if (type === "REBALL") { onBall(type); return; }
 
@@ -154,22 +154,59 @@ export default function LiveMatchScreen({
     const newBall = ball + 1;
     const newOver = newBall === 6 ? over + 1 : over;
     const oversEnded = newOver >= teams.overs;
+    const isOverEnd = newBall === 6;
 
     onBall(type);
 
     if (type === "WICKET") {
-      // Use battingPool size so joker is counted correctly
-      if (projWickets >= battingPool.length) { setTimeout(doInningsEnd, 300); return; }
+      // All out → innings end regardless of balls left
+      if (projWickets >= battingPool.length) {
+        setTimeout(doInningsEnd, 300);
+        return;
+      }
+
       const outIds = battingPool.filter(p => p.out).map(p => p.id);
-      setModal({ type: "batsman", exclude: [...outIds, batsman.id], reason: "wicket" });
+
+      if (isOverEnd && !oversEnded) {
+        // ── 6th ball wicket, NOT last over:
+        // Show batsman modal first; queue bowler modal to open after.
+        setPendingModal({ type: "bowler", lastBowler: bowler.id });
+      }
+      // If isOverEnd && oversEnded → innings ends after batsman is selected (handled in onSelect)
+
+      setModal({ type: "batsman", exclude: [...outIds, batsman.id], reason: "wicket", oversEnded });
       return;
     }
 
-    if (innings === 2 && target !== null && projScore > target) { setTimeout(onMatchEnd, 300); return; }
+    // ── Innings 2 chase complete ─────────────────────────────────────────
+    if (innings === 2 && target !== null && projScore > target) {
+      setTimeout(onMatchEnd, 300);
+      return;
+    }
 
-    if (newBall === 6) {
+    // ── End of over ──────────────────────────────────────────────────────
+    if (isOverEnd) {
       if (oversEnded) setTimeout(doInningsEnd, 300);
       else setModal({ type: "bowler", lastBowler: bowler.id });
+    }
+  };
+
+  // ─── Batsman selected ────────────────────────────────────────────────────
+  // After picking new batsman:
+  //   • If a bowler modal is pending (6th-ball wicket) → open it next.
+  //   • If the over was the last one (oversEnded flag) → trigger innings end.
+  //   • Otherwise just close.
+  const handleBatsmanSelect = (p) => {
+    onBatsmanChange(p);
+    const pending = pendingModal;
+    const wasOversEnded = modal?.oversEnded;
+    setModal(null);
+    setPendingModal(null);
+
+    if (pending) {
+      setTimeout(() => setModal(pending), 150);
+    } else if (wasOversEnded) {
+      setTimeout(doInningsEnd, 300);
     }
   };
 
@@ -292,7 +329,6 @@ export default function LiveMatchScreen({
       <Btn label="End Match" color={C.red} outline onClick={() => onMatchEnd()} />
 
       {/* ── Bowler Change Modal ──────────────────────────────── */}
-      {/* filterOut=false: bowlers don't get dismissed, the .out flag must not hide them */}
       <Modal visible={modal?.type === "bowler"}>
         <PlayerSelector
           players={bowlingPool}
@@ -315,7 +351,6 @@ export default function LiveMatchScreen({
       </Modal>
 
       {/* ── Batsman Change Modal ─────────────────────────────── */}
-      {/* filterOut=true (default): dismissed batsmen are correctly hidden */}
       <Modal visible={modal?.type === "batsman"}>
         <PlayerSelector
           players={battingPool}
@@ -327,7 +362,11 @@ export default function LiveMatchScreen({
               : "Swap current batsman (dismissed players excluded)"
           }
           filterOut={true}
-          onSelect={(p) => { onBatsmanChange(p); setModal(null); }}
+          onSelect={
+            modal?.reason === "wicket"
+              ? handleBatsmanSelect          // ← uses the new chained handler
+              : (p) => { onBatsmanChange(p); setModal(null); }   // swap: plain close
+          }
         />
         {modal?.reason === "swap" && (
           <Btn label="Cancel" sm color={C.textMuted}
