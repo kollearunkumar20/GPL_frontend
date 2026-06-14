@@ -3,8 +3,8 @@ import { C, font } from "../utils/theme";
 import { Btn, BackBtn, SectionTitle, Input, Badge, Lbl, Divider } from "../components/Primitives";
 
 export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
-  const [t1Name, setT1Name] = useState(teams.team1.name || "");
-  const [t2Name, setT2Name] = useState(teams.team2.name || "");
+  const [t1Name, setT1Name] = useState(teams.team1.name || "Six Smashers");
+  const [t2Name, setT2Name] = useState(teams.team2.name || "Yorker Kings");
   const [oversInput, setOversInput] = useState(String(teams.overs || 5));
   const [t1Selected, setT1Selected] = useState(new Set(teams.team1.players.map(p => p.id)));
   const [t2Selected, setT2Selected] = useState(new Set(teams.team2.players.map(p => p.id)));
