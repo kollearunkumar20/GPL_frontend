@@ -256,14 +256,41 @@ export function LeaderboardScreen({ nav, showSnack }) {
   const [error, setError] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
 
-  const load = (type) => {
+  // Date filter state
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [filterActive, setFilterActive] = useState(false);
+
+  const load = (type, from, to, isFiltered) => {
     setLoading(true); setError(null);
-    api.getLeaderboard(type)
+
+    const fetchFn = isFiltered
+      ? api.getLeaderboardByDate(type, from || null, to || null)
+      : api.getLeaderboard(type);
+
+    fetchFn
       .then((data) => { setPlayers(data); setLoading(false); })
-      .catch(() => { setError("Could not load leaderboard from server."); setLoading(false); });
+      .catch(() => { setError("Could not load leaderboard."); setLoading(false); });
   };
 
-  React.useEffect(() => { load(tab); }, [tab]);
+  useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
+
+  const handleApplyFilter = () => {
+    if (!fromDate && !toDate) {
+      showSnack("Pick at least one date to filter.", "error"); return;
+    }
+    if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+      showSnack("From date can't be after To date.", "error"); return;
+    }
+    setFilterActive(true);
+    load(tab, fromDate, toDate, true);
+  };
+
+  const handleClearFilter = () => {
+    setFromDate(""); setToDate("");
+    setFilterActive(false);
+    load(tab, "", "", false);
+  };
 
   if (selectedPlayer) {
     return <PlayerProfile player={selectedPlayer} onBack={() => setSelectedPlayer(null)} />;
@@ -274,12 +301,14 @@ export function LeaderboardScreen({ nav, showSnack }) {
   return (
     <div>
       <BackBtn onClick={() => nav("Home")} />
-      <SectionTitle title="Leaderboard" sub="Career stats · powered by backend" />
+      <SectionTitle title="Leaderboard" sub="Career stats · powered by Supabase" />
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+      {/* ── Batting / Bowling tabs ── */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {[["batting", "🏏 Batting"], ["bowling", "⚡ Bowling"]].map(([v, l]) => (
           <button key={v} onClick={() => setTab(v)} style={{
-            flex: 1, padding: "10px 0", borderRadius: 10, fontFamily: font, fontWeight: 700, fontSize: 13,
+            flex: 1, padding: "10px 0", borderRadius: 10,
+            fontFamily: font, fontWeight: 700, fontSize: 13,
             background: tab === v ? C.yellow + "22" : "transparent",
             border: `1.5px solid ${tab === v ? C.yellow : C.border}`,
             color: tab === v ? C.yellow : C.textMuted, cursor: "pointer",
@@ -287,24 +316,101 @@ export function LeaderboardScreen({ nav, showSnack }) {
         ))}
       </div>
 
+      {/* ── Date filter panel ── */}
+      <div style={{
+        background: C.card, border: `1px solid ${filterActive ? C.blue + "66" : C.border}`,
+        borderRadius: 12, padding: "12px 14px", marginBottom: 16,
+      }}>
+        <div style={{
+          color: C.textMuted, fontSize: 11, fontFamily: font,
+          fontWeight: 700, marginBottom: 10, letterSpacing: 0.5,
+        }}>
+          📅 FILTER BY DATE RANGE
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          {/* From date */}
+          <div style={{ flex: 1 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, fontFamily: font, marginBottom: 4 }}>FROM</div>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={e => setFromDate(e.target.value)}
+              style={{
+                width: "100%", padding: "8px 10px", borderRadius: 8, boxSizing: "border-box",
+                background: C.surface, border: `1px solid ${C.border}`,
+                color: fromDate ? C.text : C.textMuted,
+                fontFamily: font, fontSize: 12, outline: "none",
+              }}
+            />
+          </div>
+
+          {/* To date */}
+          <div style={{ flex: 1 }}>
+            <div style={{ color: C.textMuted, fontSize: 10, fontFamily: font, marginBottom: 4 }}>TO</div>
+            <input
+              type="date"
+              value={toDate}
+              onChange={e => setToDate(e.target.value)}
+              style={{
+                width: "100%", padding: "8px 10px", borderRadius: 8, boxSizing: "border-box",
+                background: C.surface, border: `1px solid ${C.border}`,
+                color: toDate ? C.text : C.textMuted,
+                fontFamily: font, fontSize: 12, outline: "none",
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn label="Apply Filter" sm color={C.blue} onClick={handleApplyFilter} />
+          {filterActive && (
+            <Btn label="Clear" sm color={C.textMuted} onClick={handleClearFilter} />
+          )}
+        </div>
+
+        {/* Active filter badge */}
+        {filterActive && (
+          <div style={{
+            marginTop: 10, fontSize: 11, fontFamily: font,
+            color: C.blue, display: "flex", alignItems: "center", gap: 6,
+          }}>
+            <span>🔵</span>
+            <span>
+              Showing: {fromDate || "All time"} → {toDate || "Today"}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── States ── */}
       {loading && (
         <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontFamily: font }}>
           Loading leaderboard...
         </div>
       )}
       {error && (
-        <div style={{ background: C.red + "15", border: `1px solid ${C.red}33`, borderRadius: 10, padding: "12px 14px", color: C.red, fontSize: 13, fontFamily: font }}>
+        <div style={{
+          background: C.red + "15", border: `1px solid ${C.red}33`,
+          borderRadius: 10, padding: "12px 14px",
+          color: C.red, fontSize: 13, fontFamily: font,
+        }}>
           {error}
         </div>
       )}
       {!loading && !error && players.length === 0 && (
         <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontFamily: font }}>
           <div style={{ fontSize: 44, marginBottom: 12 }}>🏆</div>
-          <div style={{ fontWeight: 700 }}>No data yet</div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>Play matches and sync stats to see rankings.</div>
+          <div style={{ fontWeight: 700 }}>
+            {filterActive ? "No matches in this date range" : "No data yet"}
+          </div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>
+            {filterActive ? "Try a wider date range." : "Play matches to see rankings."}
+          </div>
         </div>
       )}
 
+      {/* ── Player rows ── */}
       {!loading && players.map((p, i) => (
         <div
           key={p.id}
@@ -321,9 +427,13 @@ export function LeaderboardScreen({ nav, showSnack }) {
             marginBottom: 8, cursor: "pointer", fontFamily: font,
           }}
         >
-          <div style={{ color: medals[i] || C.textMuted, fontWeight: 900, fontSize: i < 3 ? 20 : 16, width: 28, textAlign: "center" }}>
+          <div style={{
+            color: medals[i] || C.textMuted, fontWeight: 900,
+            fontSize: i < 3 ? 20 : 16, width: 28, textAlign: "center",
+          }}>
             {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
           </div>
+
           <div style={{
             width: 38, height: 38, borderRadius: "50%",
             background: `linear-gradient(135deg, ${C.blue}33, ${C.purple}33)`,
@@ -333,6 +443,7 @@ export function LeaderboardScreen({ nav, showSnack }) {
           }}>
             {String(p?.name || "?").charAt(0).toUpperCase()}
           </div>
+
           <div style={{ flex: 1 }}>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{p.name}</div>
             <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
@@ -341,11 +452,17 @@ export function LeaderboardScreen({ nav, showSnack }) {
                 : `Eco ${p.economy != null ? p.economy.toFixed(2) : "-"} · Avg ${p.bowlingAverage != null ? p.bowlingAverage.toFixed(1) : "-"} · ${p.totalMatches ?? 0}m`}
             </div>
           </div>
+
           <div style={{ textAlign: "right" }}>
-            <div style={{ color: tab === "batting" ? C.green : C.red, fontWeight: 900, fontSize: 22 }}>
+            <div style={{
+              color: tab === "batting" ? C.green : C.red,
+              fontWeight: 900, fontSize: 22,
+            }}>
               {tab === "batting" ? (p.totalRuns ?? 0) : (p.totalWickets ?? 0)}
             </div>
-            <div style={{ color: C.textMuted, fontSize: 10 }}>{tab === "batting" ? "runs" : "wkts"}</div>
+            <div style={{ color: C.textMuted, fontSize: 10 }}>
+              {tab === "batting" ? "runs" : "wkts"}
+            </div>
           </div>
           <div style={{ color: C.textMuted, fontSize: 14 }}>›</div>
         </div>
