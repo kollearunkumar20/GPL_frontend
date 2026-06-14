@@ -303,7 +303,7 @@ export default function App() {
     ),
 
     TeamSetup: (
-      <TeamSetupScreen nav={nav} teams={teams} globalPlayers={globalPlayers} onSave={handleTeamSave} />
+      <TeamSetupScreen nav={nav} teams={teams} globalPlayers={globalPlayers} onToggleJoker={handleToggleJoker} onSave={handleTeamSave} />
     ),
 
     MatchSetup: <MatchSetupScreen nav={nav} teams={teams} onSetup={handleSetup} />,
@@ -334,7 +334,6 @@ export default function App() {
         globalPlayers={globalPlayers}
         onAdd={handleAddPlayerToPool}
         onDel={handleDelPlayerFromPool}
-        onToggleJoker={handleToggleJoker}
         showSnack={showSnack}
       />
     ),
