@@ -2,7 +2,7 @@ import { useState } from "react";
 import { C, font } from "../utils/theme";
 import { Btn, BackBtn, SectionTitle, Input, Badge, Lbl, Divider } from "../components/Primitives";
 
-export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
+export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave, onToggleJoker }) {
   const [t1Name, setT1Name] = useState(teams.team1.name || "Six Smashers");
   const [t2Name, setT2Name] = useState(teams.team2.name || "Yorker Kings");
   const [oversInput, setOversInput] = useState(String(teams.overs || 5));
@@ -10,13 +10,12 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
   const [t2Selected, setT2Selected] = useState(new Set(teams.team2.players.map(p => p.id)));
 
   const overs = parseInt(oversInput) || 0;
+  const jokerCount = globalPlayers.filter(p => p.isJoker).length;
+  const jokerPlayer = globalPlayers.find(p => p.isJoker);
 
-  // Regular toggle for non-joker players — only affects the team being edited
   const toggle = (setFn, id) =>
     setFn(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
-  // Joker toggle — ONE tap adds/removes them from BOTH teams simultaneously.
-  // "in both" → deselect both. Otherwise → add to both.
   const toggleJoker = (id) => {
     const inBoth = t1Selected.has(id) && t2Selected.has(id);
     const op = (prev) => {
@@ -26,6 +25,7 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
     };
     setT1Selected(op);
     setT2Selected(op);
+    onToggleJoker(id);
   };
 
   const canProceed =
@@ -92,18 +92,20 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
         </div>
       )}
 
-      {/* Joker legend — only shown when a joker exists in pool */}
-      {globalPlayers.some(p => p.isJoker) && (
+      {/* ── Joker info banner ── */}
+      {jokerCount > 0 && (
         <div style={{
           background: "#a78bfa15", border: "1px solid #a78bfa44",
           borderRadius: 10, padding: "10px 14px", marginBottom: 16,
           display: "flex", alignItems: "center", gap: 8, fontFamily: font,
         }}>
           <span style={{ fontSize: 18 }}>🃏</span>
-          <div>
-            <div style={{ color: "#a78bfa", fontWeight: 700, fontSize: 12 }}>Joker Player</div>
-            <div style={{ color: C.textMuted, fontSize: 11 }}>
-              Tapping a Joker selects them for <strong style={{ color: "#a78bfa" }}>both teams</strong> at once
+          <div style={{ flex: 1 }}>
+            <div style={{ color: "#a78bfa", fontWeight: 700, fontSize: 12 }}>
+              {jokerPlayer?.name} is the Joker
+            </div>
+            <div style={{ color: C.textMuted, fontSize: 11, marginTop: 1 }}>
+              Joker plays for both teams · auto-selected below
             </div>
           </div>
         </div>
@@ -125,15 +127,13 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
             {globalPlayers.map(p => {
               const sel = selected.has(p.id);
               const otherSelected = n === 1 ? t2Selected : t1Selected;
-              // Non-jokers locked if picked by the other team
               const lockedByOther = otherSelected.has(p.id) && !p.isJoker;
-              // Joker is "fully selected" only when present in both sets
               const jokerInBoth = p.isJoker && t1Selected.has(p.id) && t2Selected.has(p.id);
 
               const handleClick = () => {
                 if (lockedByOther) return;
-                if (p.isJoker) toggleJoker(p.id);   // joker: sync both teams
-                else toggle(setSelected, p.id);       // normal: just this team
+                if (p.isJoker) toggleJoker(p.id);
+                else toggle(setSelected, p.id);
               };
 
               return (
@@ -170,7 +170,6 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
                     </div>
 
                     <div>
-                      {/* Name + badge */}
                       <div style={{
                         fontSize: 14, display: "flex", alignItems: "center", gap: 5,
                         color: sel ? C.text : lockedByOther ? C.textMuted : C.text,
@@ -186,7 +185,6 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
                           </span>
                         )}
                       </div>
-                      {/* Hint line under joker name */}
                       {p.isJoker && (
                         <div style={{ color: "#a78bfa88", fontSize: 10, marginTop: 1 }}>
                           {jokerInBoth ? "✓ Selected for both teams" : "Tap to add to both teams"}
@@ -196,10 +194,33 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {/* Joker toggle button */}
+                    {!lockedByOther && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!p.isJoker && jokerCount >= 1) return; // already a joker set
+                          toggleJoker(p.id);
+                        }}
+                        style={{
+                          background: p.isJoker ? "#a78bfa22" : "transparent",
+                          border: `1.5px solid ${p.isJoker ? "#a78bfa" : C.border}`,
+                          borderRadius: 8,
+                          color: p.isJoker ? "#a78bfa" : (!p.isJoker && jokerCount >= 1) ? C.border : C.textMuted,
+                          fontSize: 11, fontWeight: 700,
+                          padding: "4px 8px", cursor: (!p.isJoker && jokerCount >= 1) ? "not-allowed" : "pointer",
+                          fontFamily: font, flexShrink: 0,
+                          opacity: (!p.isJoker && jokerCount >= 1) ? 0.3 : 1,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {p.isJoker ? "🃏 Joker" : "🃏"}
+                      </button>
+                    )}
+
                     {lockedByOther && (
                       <Badge color={C.textMuted}>In Team {n === 1 ? 2 : 1}</Badge>
                     )}
-                    {/* Joker: show "✓ Both" pill when fully selected */}
                     {p.isJoker && jokerInBoth && (
                       <span style={{
                         fontSize: 10, fontWeight: 700, color: "#a78bfa",
@@ -209,7 +230,6 @@ export default function TeamSetupScreen({ nav, teams, globalPlayers, onSave }) {
                         ✓ Both
                       </span>
                     )}
-                    {/* Normal player: regular green checkmark */}
                     {!p.isJoker && sel && (
                       <span style={{ color: C.green, fontSize: 18, fontWeight: 900 }}>✓</span>
                     )}
