@@ -4,7 +4,7 @@ import { Btn, BackBtn, SectionTitle, Input } from "../components/Primitives";
 import api from "../api/api";
 import { PlayerProfile } from "./PlayerProfile";
 
-export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker, showSnack }) {
+export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, showSnack }) {
   const [name, setName] = useState("");
   const [show, setShow] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -48,9 +48,6 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker,
 
   const canSubmit = name.trim() && !nameError;
 
-  // How many jokers are currently set
-  const jokerCount = globalPlayers.filter(p => p.isJoker).length;
-
   return (
     <div>
       <BackBtn onClick={() => nav("Home")} />
@@ -65,27 +62,6 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker,
           />
         </div>
       </div>
-
-      {/* ── Joker info banner (shows once any joker is set) ── */}
-      {jokerCount > 0 && (
-        <div style={{
-          background: "#a78bfa15", border: "1px solid #a78bfa44",
-          borderRadius: 10, padding: "10px 14px", marginBottom: 14,
-          display: "flex", alignItems: "center", gap: 10, fontFamily: font,
-        }}>
-          <span style={{ fontSize: 20 }}>🃏</span>
-          <div>
-            <div style={{ color: "#a78bfa", fontWeight: 700, fontSize: 12 }}>
-              {jokerCount === 1
-                ? `${globalPlayers.find(p => p.isJoker)?.name} is the Joker`
-                : `${jokerCount} Jokers set`}
-            </div>
-            <div style={{ color: C.textMuted, fontSize: 11, marginTop: 1 }}>
-              Joker can bat &amp; bowl for either team
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Add player form ── */}
       {show && (
@@ -147,14 +123,14 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker,
             <div
               key={p.id || i}
               style={{
-                background: p.isJoker ? "#a78bfa0e" : C.card,
-                border: `1px solid ${p.isJoker ? "#a78bfa55" : C.border}`,
+                background: C.card,
+                border: `1px solid ${C.border}`,
                 borderRadius: 12, padding: "12px 14px",
                 display: "flex", alignItems: "center", gap: 12,
                 fontFamily: font,
               }}
             >
-              {/* Avatar — tap to open profile */}
+              {/* Avatar */}
               <div
                 onClick={() => {
                   api.getPlayerStats(p.id)
@@ -163,19 +139,16 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker,
                 }}
                 style={{
                   width: 36, height: 36, borderRadius: "50%", cursor: "pointer", flexShrink: 0,
-                  background: p.isJoker
-                    ? `linear-gradient(135deg, #a78bfa55, #7c3aed55)`
-                    : `linear-gradient(135deg, ${C.blue}33, ${C.purple}33)`,
-                  border: `1.5px solid ${p.isJoker ? "#a78bfa55" : C.blue + "33"}`,
+                  background: `linear-gradient(135deg, ${C.blue}33, ${C.purple}33)`,
+                  border: `1.5px solid ${C.blue}33`,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 700, fontSize: 15,
-                  color: p.isJoker ? "#a78bfa" : C.blue,
+                  fontWeight: 700, fontSize: 15, color: C.blue,
                 }}
               >
                 {String(p?.name || "?").charAt(0).toUpperCase()}
               </div>
 
-              {/* Name + stats — tap to open profile */}
+              {/* Name + stats */}
               <div
                 onClick={() => {
                   api.getPlayerStats(p.id)
@@ -184,51 +157,11 @@ export function PlayersScreen({ nav, globalPlayers, onAdd, onDel, onToggleJoker,
                 }}
                 style={{ flex: 1, cursor: "pointer" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: C.text, fontWeight: 600 }}>{p.name}</span>
-                  {p.isJoker && (
-                    <span style={{
-                      fontSize: 9, fontWeight: 700, color: "#a78bfa",
-                      background: "#a78bfa22", border: "1px solid #a78bfa44",
-                      borderRadius: 4, padding: "1px 5px", letterSpacing: 0.5,
-                    }}>
-                      🃏 JOKER
-                    </span>
-                  )}
-                </div>
+                <div style={{ color: C.text, fontWeight: 600 }}>{p.name}</div>
                 <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
                   {p.totalRuns || p.runs || 0}R · {p.totalWickets || p.wickets || 0}W
                 </div>
               </div>
-
-              {/* ── Joker toggle button ── */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Only allow setting joker if none set yet, or this player is already the joker
-                  if (!p.isJoker && jokerCount >= 1) {
-                    showSnack("Only 1 Joker allowed. Remove the current Joker first.", "error");
-                    return;
-                  }
-                  onToggleJoker(p.id);
-                  showSnack(
-                    p.isJoker ? `${p.name} is no longer Joker` : `${p.name} is now the 🃏 Joker!`,
-                    p.isJoker ? "info" : "success"
-                  );
-                }}
-                style={{
-                  background: p.isJoker ? "#a78bfa22" : "transparent",
-                  border: `1.5px solid ${p.isJoker ? "#a78bfa" : C.border}`,
-                  borderRadius: 8,
-                  color: p.isJoker ? "#a78bfa" : C.textMuted,
-                  fontSize: 11, fontWeight: 700,
-                  padding: "5px 9px", cursor: "pointer",
-                  fontFamily: font, flexShrink: 0,
-                  transition: "all 0.15s",
-                }}
-              >
-                {p.isJoker ? "🃏 Joker" : "🃏"}
-              </button>
 
               {/* Profile arrow */}
               <div
@@ -256,7 +189,6 @@ export function LeaderboardScreen({ nav, showSnack }) {
   const [error, setError] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
 
-  // Date filter state
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [filterActive, setFilterActive] = useState(false);
@@ -273,8 +205,9 @@ export function LeaderboardScreen({ nav, showSnack }) {
       .catch(() => { setError("Could not load leaderboard."); setLoading(false); });
   };
 
-// eslint-disable-next-line react-hooks/exhaustive-deps
-useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
+
   const handleApplyFilter = () => {
     if (!fromDate && !toDate) {
       showSnack("Pick at least one date to filter.", "error"); return;
@@ -329,12 +262,10 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          {/* From date */}
           <div style={{ flex: 1 }}>
             <div style={{ color: C.textMuted, fontSize: 10, fontFamily: font, marginBottom: 4 }}>FROM</div>
             <input
-              type="date"
-              value={fromDate}
+              type="date" value={fromDate}
               onChange={e => setFromDate(e.target.value)}
               style={{
                 width: "100%", padding: "8px 10px", borderRadius: 8, boxSizing: "border-box",
@@ -344,13 +275,10 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
               }}
             />
           </div>
-
-          {/* To date */}
           <div style={{ flex: 1 }}>
             <div style={{ color: C.textMuted, fontSize: 10, fontFamily: font, marginBottom: 4 }}>TO</div>
             <input
-              type="date"
-              value={toDate}
+              type="date" value={toDate}
               onChange={e => setToDate(e.target.value)}
               style={{
                 width: "100%", padding: "8px 10px", borderRadius: 8, boxSizing: "border-box",
@@ -369,21 +297,17 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
           )}
         </div>
 
-        {/* Active filter badge */}
         {filterActive && (
           <div style={{
             marginTop: 10, fontSize: 11, fontFamily: font,
             color: C.blue, display: "flex", alignItems: "center", gap: 6,
           }}>
             <span>🔵</span>
-            <span>
-              Showing: {fromDate || "All time"} → {toDate || "Today"}
-            </span>
+            <span>Showing: {fromDate || "All time"} → {toDate || "Today"}</span>
           </div>
         )}
       </div>
 
-      {/* ── States ── */}
       {loading && (
         <div style={{ textAlign: "center", padding: "48px 0", color: C.textMuted, fontFamily: font }}>
           Loading leaderboard...
@@ -392,8 +316,7 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
       {error && (
         <div style={{
           background: C.red + "15", border: `1px solid ${C.red}33`,
-          borderRadius: 10, padding: "12px 14px",
-          color: C.red, fontSize: 13, fontFamily: font,
+          borderRadius: 10, padding: "12px 14px", color: C.red, fontSize: 13, fontFamily: font,
         }}>
           {error}
         </div>
@@ -410,7 +333,6 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
         </div>
       )}
 
-      {/* ── Player rows ── */}
       {!loading && players.map((p, i) => (
         <div
           key={p.id}
@@ -433,7 +355,6 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
           }}>
             {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
           </div>
-
           <div style={{
             width: 38, height: 38, borderRadius: "50%",
             background: `linear-gradient(135deg, ${C.blue}33, ${C.purple}33)`,
@@ -443,7 +364,6 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
           }}>
             {String(p?.name || "?").charAt(0).toUpperCase()}
           </div>
-
           <div style={{ flex: 1 }}>
             <div style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{p.name}</div>
             <div style={{ color: C.textMuted, fontSize: 11, marginTop: 2 }}>
@@ -452,12 +372,8 @@ useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
                 : `Eco ${p.economy != null ? p.economy.toFixed(2) : "-"} · Avg ${p.bowlingAverage != null ? p.bowlingAverage.toFixed(1) : "-"} · ${p.totalMatches ?? 0}m`}
             </div>
           </div>
-
           <div style={{ textAlign: "right" }}>
-            <div style={{
-              color: tab === "batting" ? C.green : C.red,
-              fontWeight: 900, fontSize: 22,
-            }}>
+            <div style={{ color: tab === "batting" ? C.green : C.red, fontWeight: 900, fontSize: 22 }}>
               {tab === "batting" ? (p.totalRuns ?? 0) : (p.totalWickets ?? 0)}
             </div>
             <div style={{ color: C.textMuted, fontSize: 10 }}>
