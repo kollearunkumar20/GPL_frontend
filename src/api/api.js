@@ -262,4 +262,80 @@ const api = {
   },
 };
 
+getLeaderboardByDate: async (type = "batting", fromDate = null, toDate = null) => {
+  let query = supabase
+    .from("matches")
+    .select("match_data, created_at")
+    .eq("status", "completed");
+
+  if (fromDate) query = query.gte("created_at", fromDate);
+  if (toDate) {
+    // include the full toDate day
+    const end = new Date(toDate);
+    end.setDate(end.getDate() + 1);
+    query = query.lt("created_at", end.toISOString());
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  // Aggregate per-player stats from match_data JSONB
+  const playerMap = {};
+
+  for (const match of data) {
+    const md = match.match_data;
+    if (!md) continue;
+
+    const allPlayers = [
+      ...(md.teams?.team1?.players || []),
+      ...(md.teams?.team2?.players || []),
+    ];
+
+    for (const p of allPlayers) {
+      if (!p?.id || !p?.name) continue;
+      if (!playerMap[p.id]) {
+        playerMap[p.id] = {
+          id: p.id, name: p.name,
+          total_runs: 0, total_balls_faced: 0,
+          total_balls_bowled: 0, total_runs_conceded: 0,
+          total_wickets: 0, total_innings: 0, total_not_outs: 0,
+        };
+      }
+      const pm = playerMap[p.id];
+      pm.total_runs += p.runs || 0;
+      pm.total_balls_faced += p.balls || 0;
+      pm.total_balls_bowled += p.ballsBowled || 0;
+      pm.total_runs_conceded += p.runsConceded || 0;
+      pm.total_wickets += p.wickets || 0;
+      if ((p.balls || 0) > 0) {
+        pm.total_innings += 1;
+        if (!p.out) pm.total_not_outs += 1;
+      }
+    }
+  }
+
+  const normalized = Object.values(playerMap).map(p => ({
+    id: p.id, name: p.name,
+    totalRuns: p.total_runs,
+    totalWickets: p.total_wickets,
+    totalMatches: p.total_innings,
+    totalBallsFaced: p.total_balls_faced,
+    totalBallsBowled: p.total_balls_bowled,
+    totalRunsConceded: p.total_runs_conceded,
+    strikeRate: p.total_balls_faced > 0
+      ? (p.total_runs / p.total_balls_faced) * 100 : 0,
+    battingAverage: (p.total_innings - p.total_not_outs) > 0
+      ? p.total_runs / (p.total_innings - p.total_not_outs)
+      : p.total_runs,
+    economy: p.total_balls_bowled > 0
+      ? (p.total_runs_conceded / (p.total_balls_bowled / 6)) : 0,
+    bowlingAverage: p.total_wickets > 0
+      ? p.total_runs_conceded / p.total_wickets : 0,
+  }));
+
+  return type === "batting"
+    ? normalized.sort((a, b) => b.totalRuns - a.totalRuns)
+    : normalized.sort((a, b) => b.totalWickets - a.totalWickets);
+},
+
 export default api;
