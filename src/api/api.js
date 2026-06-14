@@ -69,27 +69,25 @@ const api = {
   // ===============================
   syncPerformance: async (performances) => {
     for (const p of performances) {
-  
+
       console.log("Processing player:", p.playerId);
-  
-      // 1️⃣ Fetch existing player
+
       const { data: existing, error: fetchError } = await supabase
         .from("player")
         .select("*")
         .eq("id", p.playerId)
         .single();
-  
+
       if (fetchError) {
         console.error("FETCH ERROR:", fetchError);
         throw fetchError;
       }
-  
+
       if (!existing) {
         console.error("No player found with ID:", p.playerId);
         continue;
       }
-  
-      // 2️⃣ Build updated object
+
       const updated = {
         total_runs: (existing.total_runs || 0) + (p.runs || 0),
         total_balls_faced: (existing.total_balls_faced || 0) + (p.ballsFaced || 0),
@@ -99,24 +97,23 @@ const api = {
         total_innings: (existing.total_innings || 0) + (p.ballsFaced > 0 ? 1 : 0),
         total_not_outs: (existing.total_not_outs || 0) + (!p.out && p.ballsFaced > 0 ? 1 : 0)
       };
-  
+
       console.log("Updating with:", updated);
-  
-      // 3️⃣ Update
+
       const { data: updateData, error: updateError } = await supabase
         .from("player")
         .update(updated)
         .eq("id", p.playerId)
-        .select(); // return updated row
-  
+        .select();
+
       if (updateError) {
         console.error("UPDATE ERROR:", updateError);
         throw updateError;
       }
-  
+
       console.log("Updated row:", updateData);
     }
-  
+
     return "Synced successfully";
   },
 
@@ -186,9 +183,9 @@ const api = {
       .select("*")
       .eq("id", id)
       .single();
-  
+
     if (error) throw error;
-  
+
     return {
       id: data.id,
       name: data.name,
@@ -198,19 +195,19 @@ const api = {
       totalRunsConceded: data.total_runs_conceded || 0,
       totalWickets: data.total_wickets || 0,
       totalMatches: data.total_innings || 0,
-  
+
       strikeRate: data.total_balls_faced > 0
         ? (data.total_runs / data.total_balls_faced) * 100
         : 0,
-  
+
       battingAverage: (data.total_innings - data.total_not_outs) > 0
         ? data.total_runs / (data.total_innings - data.total_not_outs)
         : data.total_runs,
-  
+
       economy: data.total_balls_bowled > 0
         ? (data.total_runs_conceded / (data.total_balls_bowled / 6))
         : 0,
-  
+
       bowlingAverage: data.total_wickets > 0
         ? data.total_runs_conceded / data.total_wickets
         : 0
@@ -224,9 +221,9 @@ const api = {
     const { data, error } = await supabase
       .from("player")
       .select("*");
-  
+
     if (error) throw error;
-  
+
     const normalized = data.map(p => ({
       id: p.id,
       name: p.name,
@@ -236,106 +233,108 @@ const api = {
       totalRunsConceded: p.total_runs_conceded || 0,
       totalWickets: p.total_wickets || 0,
       totalMatches: p.total_innings || 0,
-  
+
       strikeRate: p.total_balls_faced > 0
         ? (p.total_runs / p.total_balls_faced) * 100
         : 0,
-  
+
       battingAverage: (p.total_innings - p.total_not_outs) > 0
         ? p.total_runs / (p.total_innings - p.total_not_outs)
         : p.total_runs,
-  
+
       economy: p.total_balls_bowled > 0
         ? (p.total_runs_conceded / (p.total_balls_bowled / 6))
         : 0,
-  
+
       bowlingAverage: p.total_wickets > 0
         ? p.total_runs_conceded / p.total_wickets
         : 0
     }));
-  
+
     if (type === "batting") {
       return normalized.sort((a, b) => b.totalRuns - a.totalRuns);
     } else {
       return normalized.sort((a, b) => b.totalWickets - a.totalWickets);
     }
   },
-};
 
-getLeaderboardByDate: async (type = "batting", fromDate = null, toDate = null) => {
-  let query = supabase
-    .from("matches")
-    .select("match_data, created_at")
-    .eq("status", "completed");
+  // ===============================
+  // LEADERBOARD BY DATE
+  // ===============================
+  getLeaderboardByDate: async (type = "batting", fromDate = null, toDate = null) => {
+    let query = supabase
+      .from("matches")
+      .select("match_data, created_at")
+      .eq("status", "completed");
 
-  if (fromDate) query = query.gte("created_at", fromDate);
-  if (toDate) {
-    // include the full toDate day
-    const end = new Date(toDate);
-    end.setDate(end.getDate() + 1);
-    query = query.lt("created_at", end.toISOString());
-  }
+    if (fromDate) query = query.gte("created_at", fromDate);
+    if (toDate) {
+      const end = new Date(toDate);
+      end.setDate(end.getDate() + 1);
+      query = query.lt("created_at", end.toISOString());
+    }
 
-  const { data, error } = await query;
-  if (error) throw error;
+    const { data, error } = await query;
+    if (error) throw error;
 
-  // Aggregate per-player stats from match_data JSONB
-  const playerMap = {};
+    const playerMap = {};
 
-  for (const match of data) {
-    const md = match.match_data;
-    if (!md) continue;
+    for (const match of data) {
+      const md = match.match_data;
+      if (!md) continue;
 
-    const allPlayers = [
-      ...(md.teams?.team1?.players || []),
-      ...(md.teams?.team2?.players || []),
-    ];
+      const allPlayers = [
+        ...(md.teams?.team1?.players || []),
+        ...(md.teams?.team2?.players || []),
+      ];
 
-    for (const p of allPlayers) {
-      if (!p?.id || !p?.name) continue;
-      if (!playerMap[p.id]) {
-        playerMap[p.id] = {
-          id: p.id, name: p.name,
-          total_runs: 0, total_balls_faced: 0,
-          total_balls_bowled: 0, total_runs_conceded: 0,
-          total_wickets: 0, total_innings: 0, total_not_outs: 0,
-        };
-      }
-      const pm = playerMap[p.id];
-      pm.total_runs += p.runs || 0;
-      pm.total_balls_faced += p.balls || 0;
-      pm.total_balls_bowled += p.ballsBowled || 0;
-      pm.total_runs_conceded += p.runsConceded || 0;
-      pm.total_wickets += p.wickets || 0;
-      if ((p.balls || 0) > 0) {
-        pm.total_innings += 1;
-        if (!p.out) pm.total_not_outs += 1;
+      for (const p of allPlayers) {
+        if (!p?.id || !p?.name) continue;
+        if (!playerMap[p.id]) {
+          playerMap[p.id] = {
+            id: p.id, name: p.name,
+            total_runs: 0, total_balls_faced: 0,
+            total_balls_bowled: 0, total_runs_conceded: 0,
+            total_wickets: 0, total_innings: 0, total_not_outs: 0,
+          };
+        }
+        const pm = playerMap[p.id];
+        pm.total_runs += p.runs || 0;
+        pm.total_balls_faced += p.balls || 0;
+        pm.total_balls_bowled += p.ballsBowled || 0;
+        pm.total_runs_conceded += p.runsConceded || 0;
+        pm.total_wickets += p.wickets || 0;
+        if ((p.balls || 0) > 0) {
+          pm.total_innings += 1;
+          if (!p.out) pm.total_not_outs += 1;
+        }
       }
     }
-  }
 
-  const normalized = Object.values(playerMap).map(p => ({
-    id: p.id, name: p.name,
-    totalRuns: p.total_runs,
-    totalWickets: p.total_wickets,
-    totalMatches: p.total_innings,
-    totalBallsFaced: p.total_balls_faced,
-    totalBallsBowled: p.total_balls_bowled,
-    totalRunsConceded: p.total_runs_conceded,
-    strikeRate: p.total_balls_faced > 0
-      ? (p.total_runs / p.total_balls_faced) * 100 : 0,
-    battingAverage: (p.total_innings - p.total_not_outs) > 0
-      ? p.total_runs / (p.total_innings - p.total_not_outs)
-      : p.total_runs,
-    economy: p.total_balls_bowled > 0
-      ? (p.total_runs_conceded / (p.total_balls_bowled / 6)) : 0,
-    bowlingAverage: p.total_wickets > 0
-      ? p.total_runs_conceded / p.total_wickets : 0,
-  }));
+    const normalized = Object.values(playerMap).map(p => ({
+      id: p.id, name: p.name,
+      totalRuns: p.total_runs,
+      totalWickets: p.total_wickets,
+      totalMatches: p.total_innings,
+      totalBallsFaced: p.total_balls_faced,
+      totalBallsBowled: p.total_balls_bowled,
+      totalRunsConceded: p.total_runs_conceded,
+      strikeRate: p.total_balls_faced > 0
+        ? (p.total_runs / p.total_balls_faced) * 100 : 0,
+      battingAverage: (p.total_innings - p.total_not_outs) > 0
+        ? p.total_runs / (p.total_innings - p.total_not_outs)
+        : p.total_runs,
+      economy: p.total_balls_bowled > 0
+        ? (p.total_runs_conceded / (p.total_balls_bowled / 6)) : 0,
+      bowlingAverage: p.total_wickets > 0
+        ? p.total_runs_conceded / p.total_wickets : 0,
+    }));
 
-  return type === "batting"
-    ? normalized.sort((a, b) => b.totalRuns - a.totalRuns)
-    : normalized.sort((a, b) => b.totalWickets - a.totalWickets);
-},
+    return type === "batting"
+      ? normalized.sort((a, b) => b.totalRuns - a.totalRuns)
+      : normalized.sort((a, b) => b.totalWickets - a.totalWickets);
+  },
+
+};
 
 export default api;
