@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { C, font } from "../utils/theme";
 import { Btn, BackBtn, SectionTitle, Input } from "../components/Primitives";
 import api from "../api/api";
