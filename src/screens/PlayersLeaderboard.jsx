@@ -273,8 +273,8 @@ export function LeaderboardScreen({ nav, showSnack }) {
       .catch(() => { setError("Could not load leaderboard."); setLoading(false); });
   };
 
-  useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
-
+// eslint-disable-next-line react-hooks/exhaustive-deps
+useEffect(() => { load(tab, fromDate, toDate, filterActive); }, [tab]);
   const handleApplyFilter = () => {
     if (!fromDate && !toDate) {
       showSnack("Pick at least one date to filter.", "error"); return;
